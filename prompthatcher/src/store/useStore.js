@@ -25,6 +25,20 @@ import {
 // Price refresh interval (15 minutes)
 const PRICE_REFRESH_INTERVAL = 15 * 60 * 1000
 
+// Max number of activity logs to keep
+const MAX_ACTIVITY_LOGS = 100
+
+// Log types for activity monitoring
+const LOG_TYPES = {
+  PRICE: 'price',
+  SYNC: 'sync',
+  TRADE: 'trade',
+  EGG: 'egg',
+  SYSTEM: 'system',
+  ERROR: 'error',
+  AI: 'ai'
+}
+
 // Execution time limits in milliseconds
 const EXECUTION_LIMITS = {
   target: null, // No time limit, only SL/TP
@@ -199,9 +213,18 @@ const useStore = create(
       generateTrades: async (prompt) => {
         set({ isGeneratingTrades: true, generationError: null, pendingTrades: [] })
 
+        const numResults = prompt.numResults || 3
+        get().addLog('ai', `Generating ${numResults} trades using "${prompt.name}"...`)
+
         try {
-          const numResults = prompt.numResults || 3
           const trades = await generateTradesFromPrompt(prompt, get().settings, numResults)
+
+          // Log each generated trade
+          trades.forEach(trade => {
+            get().addLog('ai', `Generated: ${trade.asset} ${trade.strategy} | Entry: $${trade.entry} | TP: $${trade.takeProfit} | SL: $${trade.stopLoss}`, trade)
+          })
+
+          get().addLog('ai', `AI generated ${trades.length} trade signals`)
 
           set({
             pendingTrades: trades,
@@ -210,6 +233,7 @@ const useStore = create(
 
           return { success: true, trades }
         } catch (error) {
+          get().addLog('error', `AI generation failed: ${error.message}`)
           set({
             isGeneratingTrades: false,
             generationError: error.message
@@ -276,6 +300,15 @@ const useStore = create(
           pendingTrades: []
         }))
 
+        // Log egg creation
+        const assets = newSignals.map(s => s.asset).join(', ')
+        get().addLog('egg', `New egg incubating: "${prompt.name}" with ${newSignals.length} trades`, {
+          eggId: egg.id,
+          trades: newSignals.length,
+          assets,
+          capital: egg.totalCapital
+        })
+
         get().triggerSync()
 
         return egg
@@ -330,6 +363,14 @@ const useStore = create(
               } : e
             )
           }))
+
+          // Log egg hatching
+          const pnlStr = totalPnl >= 0 ? `+$${totalPnl.toFixed(2)}` : `-$${Math.abs(totalPnl).toFixed(2)}`
+          get().addLog('egg', `Egg hatched: "${egg.promptName}" - ${wins}W/${losses}L (${pnlStr})`, {
+            eggId,
+            promptName: egg.promptName,
+            results
+          })
 
           get().triggerSync()
           return true
@@ -540,6 +581,8 @@ If no truly new strategy can be generated, you must invent a new angle rather th
           uniqueAssets.push('BTC/USDT', 'ETH/USDT')
         }
 
+        get().addLog('price', `Fetching prices from ${primary.toUpperCase()}...`, { assets: uniqueAssets })
+
         set({
           priceStatus: { ...state.priceStatus, isFetching: true, error: null }
         })
@@ -548,6 +591,7 @@ If no truly new strategy can be generated, you must invent a new angle rather th
           const result = await fetchPrices(uniqueAssets, primary, secondary)
 
           if (result.error) {
+            get().addLog('error', `Price fetch failed: ${result.error}`)
             set({
               priceStatus: {
                 isFetching: false,
@@ -559,6 +603,20 @@ If no truly new strategy can be generated, you must invent a new angle rather th
             })
             return { success: false, error: result.error }
           }
+
+          // Log each price update
+          Object.entries(result.prices).forEach(([asset, data]) => {
+            get().addLog('price', `${asset}: $${data.price.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`, {
+              asset,
+              price: data.price,
+              change24h: data.change24h
+            })
+          })
+
+          get().addLog('system', `Prices updated from ${result.source}${result.fallbackUsed ? ' (fallback)' : ''}`, {
+            source: result.source,
+            assetsCount: Object.keys(result.prices).length
+          })
 
           set({
             prices: { ...state.prices, ...result.prices },
@@ -576,6 +634,7 @@ If no truly new strategy can be generated, you must invent a new angle rather th
 
           return { success: true, prices: result.prices }
         } catch (error) {
+          get().addLog('error', `Price fetch error: ${error.message}`)
           set({
             priceStatus: {
               ...state.priceStatus,
@@ -593,6 +652,9 @@ If no truly new strategy can be generated, you must invent a new angle rather th
         const { prices, signals, eggs, settings } = state
 
         let signalsUpdated = false
+        let closedTrades = []
+        let activatedTrades = []
+
         const updatedSignals = signals.map(signal => {
           if (signal.status !== 'active') return signal
 
@@ -605,6 +667,7 @@ If no truly new strategy can be generated, you must invent a new angle rather th
           // First price update - activate the trade but don't close it yet
           // This prevents immediate closure when entry price doesn't match market
           if (!signal.priceActivated) {
+            activatedTrades.push({ asset: signal.asset, strategy: signal.strategy, price: currentPrice })
             return {
               ...signal,
               priceActivated: true,
@@ -621,13 +684,22 @@ If no truly new strategy can be generated, you must invent a new angle rather th
             // Find which egg this trade belongs to
             const egg = eggs.find(e => e.trades.includes(signal.id))
             const capital = egg ? (egg.totalCapital / egg.trades.length) : 100
+            const pnl = (tradeStatus.pnlPercent / 100) * capital
+
+            closedTrades.push({
+              asset: signal.asset,
+              strategy: signal.strategy,
+              result: tradeStatus.status,
+              pnl,
+              exitPrice: tradeStatus.exitPrice
+            })
 
             return {
               ...signal,
               status: 'closed',
               result: tradeStatus.status,
               exitPrice: tradeStatus.exitPrice,
-              pnl: (tradeStatus.pnlPercent / 100) * capital,
+              pnl,
               closedAt: new Date().toISOString()
             }
           }
@@ -637,6 +709,18 @@ If no truly new strategy can be generated, you must invent a new angle rather th
             currentPrice,
             unrealizedPnl: tradeStatus.pnlPercent
           }
+        })
+
+        // Log activated trades
+        activatedTrades.forEach(trade => {
+          get().addLog('trade', `Trade activated: ${trade.asset} ${trade.strategy} @ $${trade.price.toFixed(2)}`, trade)
+        })
+
+        // Log closed trades
+        closedTrades.forEach(trade => {
+          const resultEmoji = trade.result === 'win' ? '✓' : '✗'
+          const pnlStr = trade.pnl >= 0 ? `+$${trade.pnl.toFixed(2)}` : `-$${Math.abs(trade.pnl).toFixed(2)}`
+          get().addLog('trade', `${resultEmoji} ${trade.asset} ${trade.strategy} closed: ${pnlStr}`, trade)
         })
 
         if (signalsUpdated) {
@@ -704,6 +788,24 @@ If no truly new strategy can be generated, you must invent a new angle rather th
         }
       },
 
+      // Activity Logs for real-time monitoring
+      activityLogs: [],
+      addLog: (type, message, data = null) => {
+        set((state) => ({
+          activityLogs: [
+            {
+              id: `log-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`,
+              type,
+              message,
+              data,
+              timestamp: new Date().toISOString()
+            },
+            ...state.activityLogs
+          ].slice(0, MAX_ACTIVITY_LOGS)
+        }))
+      },
+      clearLogs: () => set({ activityLogs: [] }),
+
       // UI State
       activeTab: 'incubator',
       setActiveTab: (tab) => set({ activeTab: tab }),
@@ -751,6 +853,7 @@ If no truly new strategy can be generated, you must invent a new angle rather th
         if (!client) {
           // No Supabase configured, use empty state
           set({ isCloudInitialized: true })
+          get().addLog('system', 'App started in offline mode (no Supabase config)')
           return { success: false, error: 'Supabase not configured' }
         }
 
@@ -758,6 +861,7 @@ If no truly new strategy can be generated, you must invent a new angle rather th
           return { success: false, error: 'Already initializing' }
         }
 
+        get().addLog('sync', 'Initializing from Supabase cloud...')
         set({ isInitializing: true })
 
         try {
@@ -766,8 +870,12 @@ If no truly new strategy can be generated, you must invent a new angle rather th
             isCloudInitialized: true,
             isInitializing: false
           })
+          if (result.success) {
+            get().addLog('sync', 'Cloud initialization complete')
+          }
           return result
         } catch (err) {
+          get().addLog('error', `Cloud initialization failed: ${err.message}`)
           set({
             isCloudInitialized: true,
             isInitializing: false
@@ -785,6 +893,7 @@ If no truly new strategy can be generated, you must invent a new angle rather th
           return { success: false, error: 'Supabase not configured' }
         }
 
+        get().addLog('sync', 'Syncing data to Supabase...')
         set({ syncStatus: { ...state.syncStatus, syncing: true, error: null } })
 
         try {
@@ -810,16 +919,20 @@ If no truly new strategy can be generated, you must invent a new angle rather th
 
           // Update Supabase connected status
           if (!hasError) {
+            get().addLog('sync', `Sync complete: ${state.prompts.length} prompts, ${state.signals.length} signals, ${state.eggs.length} eggs`)
             set((s) => ({
               settings: {
                 ...s.settings,
                 supabase: { ...s.settings.supabase, connected: true }
               }
             }))
+          } else {
+            get().addLog('error', `Sync failed: ${errorMsg}`)
           }
 
           return { success: !hasError, error: errorMsg }
         } catch (err) {
+          get().addLog('error', `Sync error: ${err.message}`)
           set({
             syncStatus: {
               ...state.syncStatus,
@@ -841,6 +954,7 @@ If no truly new strategy can be generated, you must invent a new angle rather th
           return { success: false, error: 'Supabase not configured' }
         }
 
+        get().addLog('sync', 'Loading data from Supabase...')
         set({ syncStatus: { ...state.syncStatus, loading: true, error: null } })
 
         try {
@@ -853,18 +967,24 @@ If no truly new strategy can be generated, you must invent a new angle rather th
 
           // Cloud data replaces local data completely
           if (promptsResult.success) {
+            get().addLog('sync', `Loaded ${promptsResult.data.length} prompts from cloud`)
             set({ prompts: promptsResult.data })
           }
 
           if (signalsResult.success) {
+            get().addLog('sync', `Loaded ${signalsResult.data.length} signals from cloud`)
             set({ signals: signalsResult.data })
           }
 
           if (eggsResult.success) {
+            const incubating = eggsResult.data.filter(e => e.status === 'incubating').length
+            const hatched = eggsResult.data.filter(e => e.status === 'hatched').length
+            get().addLog('sync', `Loaded ${eggsResult.data.length} eggs (${incubating} incubating, ${hatched} hatched)`)
             set({ eggs: eggsResult.data })
           }
 
           if (settingsResult.success && settingsResult.data) {
+            get().addLog('sync', 'Loaded settings from cloud')
             set((s) => ({
               settings: {
                 ...s.settings,
@@ -888,8 +1008,10 @@ If no truly new strategy can be generated, you must invent a new angle rather th
             }
           })
 
+          get().addLog('system', 'Cloud data loaded successfully')
           return { success: true }
         } catch (err) {
+          get().addLog('error', `Failed to load from cloud: ${err.message}`)
           set({
             syncStatus: {
               ...state.syncStatus,

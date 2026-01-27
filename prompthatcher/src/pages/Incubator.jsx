@@ -4,6 +4,7 @@ import { Archive, MoreVertical, Trash2, Eye, Clock, TrendingUp, TrendingDown, Ch
 import useStore from '../store/useStore'
 import Header from '../components/Header'
 import EggIcon from '../components/EggIcon'
+import MonitoringConsole from '../components/MonitoringConsole'
 
 export default function Incubator() {
   const { eggs, signals, prices, priceStatus, deletePrompt, setSelectedPromptId } = useStore()
@@ -110,6 +111,11 @@ export default function Incubator() {
           <Archive size={16} />
           Hatched
         </button>
+      </div>
+
+      {/* Real-time Monitoring Console */}
+      <div className="px-4 pb-3">
+        <MonitoringConsole />
       </div>
 
       {/* Eggs List */}
