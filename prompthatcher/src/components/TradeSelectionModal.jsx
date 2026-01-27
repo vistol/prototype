@@ -52,7 +52,7 @@ export default function TradeSelectionModal({ prompt, onClose, onComplete }) {
           </div>
           <h3 className="text-lg font-bold text-white mb-2">Generating Trades</h3>
           <p className="text-sm text-gray-400">
-            AI is analyzing markets and generating trading opportunities based on your prompt...
+            Fetching real-time prices from Binance and generating trading opportunities...
           </p>
         </motion.div>
       </motion.div>
@@ -184,17 +184,21 @@ export default function TradeSelectionModal({ prompt, onClose, onComplete }) {
                 </div>
 
                 {/* Price Levels */}
-                <div className="grid grid-cols-3 gap-2 mb-3">
+                <div className="grid grid-cols-4 gap-2 mb-3">
+                  <div className="bg-quant-bg/50 rounded-lg p-2">
+                    <span className="text-xs text-accent-cyan block">Market</span>
+                    <span className="font-mono text-sm text-accent-cyan">${trade.currentPrice}</span>
+                  </div>
                   <div className="bg-quant-bg/50 rounded-lg p-2">
                     <span className="text-xs text-gray-500 block">Entry</span>
                     <span className="font-mono text-sm text-white">${trade.entry}</span>
                   </div>
                   <div className="bg-quant-bg/50 rounded-lg p-2">
-                    <span className="text-xs text-accent-green block">Take Profit</span>
+                    <span className="text-xs text-accent-green block">TP</span>
                     <span className="font-mono text-sm text-accent-green">${trade.takeProfit}</span>
                   </div>
                   <div className="bg-quant-bg/50 rounded-lg p-2">
-                    <span className="text-xs text-accent-red block">Stop Loss</span>
+                    <span className="text-xs text-accent-red block">SL</span>
                     <span className="font-mono text-sm text-accent-red">${trade.stopLoss}</span>
                   </div>
                 </div>

@@ -1,4 +1,5 @@
 // AI Service for generating trading signals from prompts
+import { fetchBinancePrices } from './priceService'
 
 // Calculate IPE using standard formula if prompt doesn't specify one
 export const calculateStandardIPE = (trade) => {
@@ -35,50 +36,74 @@ const CRYPTO_ASSETS = [
   'ATOM/USDT', 'UNI/USDT', 'LTC/USDT', 'NEAR/USDT', 'APT/USDT'
 ]
 
-// Simulated current prices (in production, fetch from Binance API)
-const SIMULATED_PRICES = {
-  'BTC/USDT': 42500,
-  'ETH/USDT': 2280,
-  'SOL/USDT': 98,
-  'BNB/USDT': 315,
-  'XRP/USDT': 0.52,
-  'ADA/USDT': 0.48,
-  'AVAX/USDT': 35,
-  'DOT/USDT': 7.2,
-  'MATIC/USDT': 0.85,
-  'LINK/USDT': 14.5,
-  'ATOM/USDT': 9.8,
-  'UNI/USDT': 6.2,
-  'LTC/USDT': 72,
-  'NEAR/USDT': 3.1,
-  'APT/USDT': 8.5
+// Get decimal places for asset price formatting
+const getDecimalPlaces = (asset, price) => {
+  if (price >= 1000) return 2
+  if (price >= 1) return 2
+  if (price >= 0.01) return 4
+  return 6
+}
+
+// Fetch real prices from Binance
+const fetchRealPrices = async (assets) => {
+  try {
+    const prices = await fetchBinancePrices(assets)
+    const priceMap = {}
+
+    for (const asset of assets) {
+      if (prices[asset]) {
+        priceMap[asset] = prices[asset].price
+      }
+    }
+
+    return priceMap
+  } catch (error) {
+    console.error('Failed to fetch real prices:', error)
+    return null
+  }
 }
 
 // Generate trade signals based on prompt parameters
 export const generateTradesFromPrompt = async (prompt, settings, numResults = 3) => {
-  // In production, this would call the actual AI API
-  // For now, we simulate the AI response
-
   const trades = []
 
   // Select random assets without repetition
   const shuffledAssets = [...CRYPTO_ASSETS].sort(() => Math.random() - 0.5)
   const selectedAssets = shuffledAssets.slice(0, numResults)
 
+  // Fetch real prices from Binance
+  console.log('Fetching real prices from Binance for:', selectedAssets)
+  const realPrices = await fetchRealPrices(selectedAssets)
+
+  if (!realPrices || Object.keys(realPrices).length === 0) {
+    throw new Error('Failed to fetch real-time prices from Binance. Please try again.')
+  }
+
+  console.log('Real prices fetched:', realPrices)
+
   for (let i = 0; i < numResults; i++) {
     const asset = selectedAssets[i]
-    const currentPrice = SIMULATED_PRICES[asset]
+    const currentPrice = realPrices[asset]
+
+    if (!currentPrice) {
+      console.warn(`No price for ${asset}, skipping`)
+      continue
+    }
+
     const strategy = Math.random() > 0.5 ? 'LONG' : 'SHORT'
+    const decimals = getDecimalPlaces(asset, currentPrice)
 
     // Calculate entry, TP, and SL based on strategy
     let entry, takeProfit, stopLoss
 
     if (strategy === 'LONG') {
-      entry = currentPrice * (1 - Math.random() * 0.02) // Slightly below current
+      // Entry at current price (or slightly below for limit order)
+      entry = currentPrice * (1 - Math.random() * 0.005) // 0-0.5% below current
       takeProfit = entry * (1 + 0.03 + Math.random() * 0.05) // 3-8% profit target
       stopLoss = entry * (1 - 0.02 - Math.random() * 0.03) // 2-5% stop loss
     } else {
-      entry = currentPrice * (1 + Math.random() * 0.02) // Slightly above current
+      // Entry at current price (or slightly above for limit order)
+      entry = currentPrice * (1 + Math.random() * 0.005) // 0-0.5% above current
       takeProfit = entry * (1 - 0.03 - Math.random() * 0.05) // 3-8% profit target
       stopLoss = entry * (1 + 0.02 + Math.random() * 0.03) // 2-5% stop loss
     }
@@ -110,9 +135,10 @@ export const generateTradesFromPrompt = async (prompt, settings, numResults = 3)
       promptName: prompt.name,
       asset,
       strategy,
-      entry: entry.toFixed(asset.includes('BTC') ? 2 : asset.includes('XRP') || asset.includes('ADA') ? 4 : 2),
-      takeProfit: takeProfit.toFixed(asset.includes('BTC') ? 2 : asset.includes('XRP') || asset.includes('ADA') ? 4 : 2),
-      stopLoss: stopLoss.toFixed(asset.includes('BTC') ? 2 : asset.includes('XRP') || asset.includes('ADA') ? 4 : 2),
+      entry: entry.toFixed(decimals),
+      takeProfit: takeProfit.toFixed(decimals),
+      stopLoss: stopLoss.toFixed(decimals),
+      currentPrice: currentPrice.toFixed(decimals), // Store the real price for reference
       ipe: calculateStandardIPE({ asset, strategy }),
       explanation: explanations[Math.floor(Math.random() * explanations.length)],
       insights: shuffledInsights.slice(0, 3),
@@ -130,44 +156,59 @@ export const generateTradesFromPrompt = async (prompt, settings, numResults = 3)
     }
   }
 
-  // If we filtered out too many, generate more until we have numResults
-  while (trades.length < numResults) {
-    const extraAsset = CRYPTO_ASSETS[Math.floor(Math.random() * CRYPTO_ASSETS.length)]
-    if (!trades.find(t => t.asset === extraAsset)) {
-      const strategy = Math.random() > 0.5 ? 'LONG' : 'SHORT'
-      const currentPrice = SIMULATED_PRICES[extraAsset]
-      let entry, takeProfit, stopLoss
+  // If we filtered out too many due to IPE, generate more with higher IPE
+  let attempts = 0
+  while (trades.length < numResults && attempts < 10) {
+    attempts++
+    const remainingAssets = CRYPTO_ASSETS.filter(a => !trades.find(t => t.asset === a))
+    if (remainingAssets.length === 0) break
 
-      if (strategy === 'LONG') {
-        entry = currentPrice * (1 - Math.random() * 0.02)
-        takeProfit = entry * (1 + 0.03 + Math.random() * 0.05)
-        stopLoss = entry * (1 - 0.02 - Math.random() * 0.03)
-      } else {
-        entry = currentPrice * (1 + Math.random() * 0.02)
-        takeProfit = entry * (1 - 0.03 - Math.random() * 0.05)
-        stopLoss = entry * (1 + 0.02 + Math.random() * 0.03)
-      }
+    const extraAsset = remainingAssets[Math.floor(Math.random() * remainingAssets.length)]
 
-      trades.push({
-        id: `trade-${Date.now()}-extra-${Math.random().toString(36).substr(2, 9)}`,
-        promptId: prompt.id,
-        promptName: prompt.name,
-        asset: extraAsset,
-        strategy,
-        entry: entry.toFixed(2),
-        takeProfit: takeProfit.toFixed(2),
-        stopLoss: stopLoss.toFixed(2),
-        ipe: Math.max(prompt.minIpe || 70, Math.floor(Math.random() * 15 + 75)),
-        explanation: `AI-generated opportunity for ${extraAsset} based on market analysis.`,
-        insights: ['Favorable market conditions', 'Technical setup confirmed', 'Risk/reward ratio optimal'],
-        executionTime: prompt.executionTime,
-        leverage: prompt.leverage,
-        capital: prompt.capital / numResults,
-        createdAt: new Date().toISOString(),
-        status: 'pending',
-        selected: false
-      })
+    // Fetch price for extra asset
+    const extraPrices = await fetchRealPrices([extraAsset])
+    if (!extraPrices || !extraPrices[extraAsset]) continue
+
+    const currentPrice = extraPrices[extraAsset]
+    const strategy = Math.random() > 0.5 ? 'LONG' : 'SHORT'
+    const decimals = getDecimalPlaces(extraAsset, currentPrice)
+
+    let entry, takeProfit, stopLoss
+
+    if (strategy === 'LONG') {
+      entry = currentPrice * (1 - Math.random() * 0.005)
+      takeProfit = entry * (1 + 0.03 + Math.random() * 0.05)
+      stopLoss = entry * (1 - 0.02 - Math.random() * 0.03)
+    } else {
+      entry = currentPrice * (1 + Math.random() * 0.005)
+      takeProfit = entry * (1 - 0.03 - Math.random() * 0.05)
+      stopLoss = entry * (1 + 0.02 + Math.random() * 0.03)
     }
+
+    trades.push({
+      id: `trade-${Date.now()}-extra-${Math.random().toString(36).substr(2, 9)}`,
+      promptId: prompt.id,
+      promptName: prompt.name,
+      asset: extraAsset,
+      strategy,
+      entry: entry.toFixed(decimals),
+      takeProfit: takeProfit.toFixed(decimals),
+      stopLoss: stopLoss.toFixed(decimals),
+      currentPrice: currentPrice.toFixed(decimals),
+      ipe: Math.max(prompt.minIpe || 70, Math.floor(Math.random() * 15 + 75)),
+      explanation: `AI-generated opportunity for ${extraAsset} based on market analysis.`,
+      insights: ['Favorable market conditions', 'Technical setup confirmed', 'Risk/reward ratio optimal'],
+      executionTime: prompt.executionTime,
+      leverage: prompt.leverage,
+      capital: prompt.capital / numResults,
+      createdAt: new Date().toISOString(),
+      status: 'pending',
+      selected: false
+    })
+  }
+
+  if (trades.length === 0) {
+    throw new Error('Could not generate trades with the required IPE threshold. Try lowering the minimum IPE.')
   }
 
   return trades.slice(0, numResults)
