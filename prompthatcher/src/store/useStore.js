@@ -921,6 +921,26 @@ If no truly new strategy can be generated, you must invent a new angle rather th
           supabase: state.settings.supabase,
           tradingPlatform: state.settings.tradingPlatform
         }
+      }),
+      // Deep merge settings to preserve default values for non-persisted properties
+      merge: (persistedState, currentState) => ({
+        ...currentState,
+        ...persistedState,
+        settings: {
+          ...currentState.settings,
+          ...(persistedState?.settings || {}),
+          // Ensure nested objects are properly merged
+          supabase: {
+            ...currentState.settings.supabase,
+            ...(persistedState?.settings?.supabase || {})
+          },
+          tradingPlatform: {
+            ...currentState.settings.tradingPlatform,
+            ...(persistedState?.settings?.tradingPlatform || {})
+          },
+          // Keep default apiKeys from currentState (not persisted)
+          apiKeys: currentState.settings.apiKeys
+        }
       })
     }
   )
