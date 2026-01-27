@@ -599,6 +599,20 @@ If no truly new strategy can be generated, you must invent a new angle rather th
           const currentPrice = priceData.price
           const tradeStatus = calculateTradeStatus(signal, currentPrice)
 
+          // First price update - activate the trade but don't close it yet
+          // This prevents immediate closure when entry price doesn't match market
+          if (!signal.priceActivated) {
+            return {
+              ...signal,
+              priceActivated: true,
+              activatedPrice: currentPrice,
+              currentPrice,
+              unrealizedPnl: tradeStatus.pnlPercent
+            }
+          }
+
+          // Trade is activated - now we can check for TP/SL hits
+          // Only close if price CROSSED the level (not if it started there)
           if (tradeStatus.status === 'win' || tradeStatus.status === 'loss') {
             signalsUpdated = true
             // Find which egg this trade belongs to
