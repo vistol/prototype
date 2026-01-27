@@ -64,11 +64,11 @@ export default function NewPromptModal() {
         animate={{ y: 0 }}
         exit={{ y: '100%' }}
         transition={{ type: 'spring', damping: 25, stiffness: 300 }}
-        className="w-full max-w-lg bg-quant-card rounded-t-3xl max-h-[90vh] overflow-hidden"
+        className="w-full max-w-lg bg-quant-card rounded-t-3xl max-h-[85vh] flex flex-col"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
-        <div className="sticky top-0 bg-quant-card border-b border-quant-border px-4 py-4 flex items-center justify-between z-10">
+        <div className="shrink-0 bg-quant-card border-b border-quant-border px-4 py-4 flex items-center justify-between">
           <h2 className="text-lg font-bold gradient-text">New Prompt</h2>
           <button
             onClick={() => setNewPromptModalOpen(false)}
@@ -79,7 +79,7 @@ export default function NewPromptModal() {
         </div>
 
         {/* Content */}
-        <div className="overflow-y-auto hide-scrollbar p-4 pb-8 space-y-6">
+        <div className="flex-1 overflow-y-auto hide-scrollbar p-4 space-y-6">
           {/* Mode Selection */}
           <div>
             <label className="text-xs text-gray-400 uppercase tracking-wider mb-2 block">Creation Mode</label>
@@ -280,7 +280,10 @@ export default function NewPromptModal() {
             </div>
           </div>
 
-          {/* Submit Button */}
+        </div>
+
+        {/* Submit Button - Fixed at bottom */}
+        <div className="shrink-0 p-4 border-t border-quant-border bg-quant-card">
           <motion.button
             onClick={handleSubmit}
             disabled={!name.trim()}
