@@ -30,21 +30,8 @@ const EXECUTION_LIMITS = {
   swing: 7 * 24 * 60 * 60 * 1000 // 7 days max
 }
 
-// Sample Eggs (incubating trade groups)
-const initialEggs = [
-  {
-    id: 'egg-1',
-    promptId: 'prompt-1',
-    promptName: 'Alpha Momentum',
-    status: 'incubating', // incubating | hatched
-    trades: ['sig-1', 'sig-2'],
-    totalCapital: 1000,
-    executionTime: 'intraday',
-    createdAt: '2024-01-22T10:00:00Z',
-    hatchedAt: null,
-    results: null
-  }
-]
+// Eggs start empty - user creates them via prompts
+const initialEggs = []
 
 // Sample data generators
 const generateSignal = (promptId, promptName) => ({
@@ -127,88 +114,8 @@ const initialPrompts = [
   }
 ]
 
-const initialSignals = [
-  {
-    id: 'sig-1',
-    promptId: 'prompt-1',
-    promptName: 'Alpha Momentum',
-    asset: 'BTC/USDT',
-    strategy: 'LONG',
-    entry: '42350.00',
-    takeProfit: '44500.00',
-    stopLoss: '41200.00',
-    ipe: 85,
-    explanation: 'Strong bullish momentum detected with increasing volume. MACD histogram showing expansion and price breaking above 20 EMA.',
-    insights: [
-      'Volume 35% above 20-day average',
-      'Price reclaimed key support at 42000',
-      'Funding rates neutral - room for upside'
-    ],
-    createdAt: '2024-01-22T14:30:00Z',
-    status: 'active'
-  },
-  {
-    id: 'sig-2',
-    promptId: 'prompt-2',
-    promptName: 'Mean Reversion Pro',
-    asset: 'ETH/USDT',
-    strategy: 'LONG',
-    entry: '2280.00',
-    takeProfit: '2450.00',
-    stopLoss: '2180.00',
-    ipe: 82,
-    explanation: 'ETH showing oversold conditions on RSI with bullish divergence. Price at lower Bollinger Band with historical support.',
-    insights: [
-      'RSI at 28 - deeply oversold',
-      'Bullish divergence on 4H chart',
-      'Strong buyer interest at 2250 level'
-    ],
-    createdAt: '2024-01-22T12:15:00Z',
-    status: 'active'
-  },
-  {
-    id: 'sig-3',
-    promptId: 'prompt-1',
-    promptName: 'Alpha Momentum',
-    asset: 'SOL/USDT',
-    strategy: 'SHORT',
-    entry: '98.50',
-    takeProfit: '92.00',
-    stopLoss: '102.00',
-    ipe: 78,
-    explanation: 'Bearish momentum building with decreasing volume on rallies. Price rejected at resistance with bearish engulfing pattern.',
-    insights: [
-      'Double top pattern forming',
-      'Volume declining on recent highs',
-      'Resistance at 100 holding strong'
-    ],
-    createdAt: '2024-01-22T10:00:00Z',
-    status: 'closed',
-    result: 'win',
-    pnl: 156.25
-  },
-  {
-    id: 'sig-4',
-    promptId: 'prompt-3',
-    promptName: 'Scalp Hunter',
-    asset: 'BNB/USDT',
-    strategy: 'LONG',
-    entry: '312.50',
-    takeProfit: '318.00',
-    stopLoss: '309.00',
-    ipe: 76,
-    explanation: 'Order book showing strong bid support. Quick scalp opportunity with tight risk management.',
-    insights: [
-      'Large bid wall at 312',
-      'Spread tightening',
-      'Quick 1.5% target achievable'
-    ],
-    createdAt: '2024-01-21T16:45:00Z',
-    status: 'closed',
-    result: 'loss',
-    pnl: -42.50
-  }
-]
+// Signals start empty - created via trade generation
+const initialSignals = []
 
 const useStore = create(
   persist(
