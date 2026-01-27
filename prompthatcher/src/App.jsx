@@ -9,6 +9,7 @@ import PromptDetail from './pages/PromptDetail'
 import NewPromptModal from './components/NewPromptModal'
 import SignalDetailModal from './components/SignalDetailModal'
 import FAB from './components/FAB'
+import Onboarding from './components/Onboarding'
 
 function App() {
   const {
@@ -16,8 +17,14 @@ function App() {
     isNewPromptModalOpen,
     setNewPromptModalOpen,
     isSignalDetailOpen,
-    selectedPromptId
+    selectedPromptId,
+    onboardingCompleted
   } = useStore()
+
+  // Show onboarding if not completed
+  if (!onboardingCompleted) {
+    return <Onboarding />
+  }
 
   const renderPage = () => {
     if (selectedPromptId) {

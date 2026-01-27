@@ -212,6 +212,17 @@ const useStore = create(
         signals: state.signals.map(s => s.id === id ? { ...s, ...updates } : s)
       })),
 
+      // Onboarding
+      onboardingCompleted: false,
+      completeOnboarding: () => set({ onboardingCompleted: true }),
+      resetOnboarding: () => set({ onboardingCompleted: false }),
+      isConfigured: () => {
+        const state = get()
+        const hasAiKey = Object.values(state.settings.apiKeys).some(key => key && key.length > 0)
+        const hasSupabase = state.settings.supabase.url && state.settings.supabase.anonKey
+        return hasAiKey && hasSupabase
+      },
+
       // Settings
       settings: {
         aiProvider: 'google',
@@ -265,7 +276,8 @@ const useStore = create(
       partialize: (state) => ({
         prompts: state.prompts,
         signals: state.signals,
-        settings: state.settings
+        settings: state.settings,
+        onboardingCompleted: state.onboardingCompleted
       })
     }
   )
