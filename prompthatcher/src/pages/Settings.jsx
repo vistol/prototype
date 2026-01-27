@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Cpu, FileText, Database, ChevronRight, Eye, EyeOff, Check, X, AlertCircle, Edit3, Plus, Crown, ChevronDown, ChevronUp } from 'lucide-react'
+import { Cpu, FileText, Database, ChevronRight, Eye, EyeOff, Check, X, AlertCircle, Edit3, Plus, Crown, ChevronDown, ChevronUp, Cloud, RefreshCw, Download, Upload } from 'lucide-react'
 import useStore from '../store/useStore'
 import Header from '../components/Header'
 
@@ -40,7 +40,10 @@ export default function Settings() {
     updatePrompt,
     updateSystemPrompt,
     addPrompt,
-    setNewPromptModalOpen
+    setNewPromptModalOpen,
+    syncToCloud,
+    loadFromCloud,
+    syncStatus
   } = useStore()
 
   const [activeTab, setActiveTab] = useState(0)
@@ -453,6 +456,59 @@ export default function Settings() {
                           <AlertCircle size={16} />
                           <span className="text-sm">Connection failed. Check your credentials.</span>
                         </>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Sync Actions */}
+                  {settings.supabase.url && settings.supabase.anonKey && (
+                    <div className="pt-4 border-t border-quant-border space-y-3">
+                      <h4 className="text-xs text-gray-400 uppercase tracking-wider">Data Sync</h4>
+
+                      <div className="grid grid-cols-2 gap-3">
+                        <button
+                          onClick={() => syncToCloud()}
+                          disabled={syncStatus.syncing}
+                          className="flex items-center justify-center gap-2 py-3 rounded-xl bg-quant-surface border border-quant-border text-gray-400 hover:text-white hover:border-accent-cyan/50 transition-all disabled:opacity-50"
+                        >
+                          {syncStatus.syncing ? (
+                            <RefreshCw size={16} className="animate-spin" />
+                          ) : (
+                            <Upload size={16} />
+                          )}
+                          <span className="text-sm">Push to Cloud</span>
+                        </button>
+
+                        <button
+                          onClick={() => loadFromCloud()}
+                          disabled={syncStatus.loading}
+                          className="flex items-center justify-center gap-2 py-3 rounded-xl bg-quant-surface border border-quant-border text-gray-400 hover:text-white hover:border-accent-cyan/50 transition-all disabled:opacity-50"
+                        >
+                          {syncStatus.loading ? (
+                            <RefreshCw size={16} className="animate-spin" />
+                          ) : (
+                            <Download size={16} />
+                          )}
+                          <span className="text-sm">Pull from Cloud</span>
+                        </button>
+                      </div>
+
+                      {/* Sync Status */}
+                      <div className="flex items-center justify-between text-xs">
+                        <span className="text-gray-500">Last synced:</span>
+                        <span className="text-gray-400 font-mono">
+                          {syncStatus.lastSynced
+                            ? new Date(syncStatus.lastSynced).toLocaleString()
+                            : 'Never'
+                          }
+                        </span>
+                      </div>
+
+                      {syncStatus.error && (
+                        <div className="flex items-center gap-2 p-2 rounded-lg bg-accent-red/20 text-accent-red text-xs">
+                          <AlertCircle size={14} />
+                          <span>{syncStatus.error}</span>
+                        </div>
                       )}
                     </div>
                   )}

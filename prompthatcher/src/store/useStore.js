@@ -1,5 +1,15 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
+import {
+  getSupabaseClient,
+  syncPrompts,
+  syncSignals,
+  syncSettings,
+  loadPrompts,
+  loadSignals,
+  loadSettings,
+  deletePromptFromCloud
+} from '../lib/supabase'
 
 // Sample data generators
 const generateSignal = (promptId, promptName) => ({
@@ -170,33 +180,49 @@ const useStore = create(
     (set, get) => ({
       // Prompts
       prompts: initialPrompts,
-      addPrompt: (prompt) => set((state) => ({
-        prompts: [...state.prompts, {
-          ...prompt,
-          id: `prompt-${Date.now()}`,
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
-          trades: 0,
-          winRate: 0,
-          profitFactor: 0,
-          totalPnl: 0,
-          maxDrawdown: 0
-        }]
-      })),
-      updatePrompt: (id, updates) => set((state) => ({
-        prompts: state.prompts.map(p =>
-          p.id === id ? { ...p, ...updates, updatedAt: new Date().toISOString() } : p
-        )
-      })),
-      archivePrompt: (id) => set((state) => ({
-        prompts: state.prompts.map(p =>
-          p.id === id ? { ...p, status: 'archived', updatedAt: new Date().toISOString() } : p
-        )
-      })),
-      deletePrompt: (id) => set((state) => ({
-        prompts: state.prompts.filter(p => p.id !== id),
-        signals: state.signals.filter(s => s.promptId !== id)
-      })),
+      addPrompt: (prompt) => {
+        set((state) => ({
+          prompts: [...state.prompts, {
+            ...prompt,
+            id: `prompt-${Date.now()}`,
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+            trades: 0,
+            winRate: 0,
+            profitFactor: 0,
+            totalPnl: 0,
+            maxDrawdown: 0
+          }]
+        }))
+        get().triggerSync()
+      },
+      updatePrompt: (id, updates) => {
+        set((state) => ({
+          prompts: state.prompts.map(p =>
+            p.id === id ? { ...p, ...updates, updatedAt: new Date().toISOString() } : p
+          )
+        }))
+        get().triggerSync()
+      },
+      archivePrompt: (id) => {
+        set((state) => ({
+          prompts: state.prompts.map(p =>
+            p.id === id ? { ...p, status: 'archived', updatedAt: new Date().toISOString() } : p
+          )
+        }))
+        get().triggerSync()
+      },
+      deletePrompt: async (id) => {
+        const client = get().getClient()
+        if (client) {
+          await deletePromptFromCloud(client, id)
+        }
+        set((state) => ({
+          prompts: state.prompts.filter(p => p.id !== id),
+          signals: state.signals.filter(s => s.promptId !== id)
+        }))
+        get().triggerSync()
+      },
 
       // Signals
       signals: initialSignals,
@@ -205,12 +231,16 @@ const useStore = create(
         if (prompt) {
           const signal = generateSignal(promptId, prompt.name)
           set((state) => ({ signals: [signal, ...state.signals] }))
+          get().triggerSync()
           return signal
         }
       },
-      updateSignal: (id, updates) => set((state) => ({
-        signals: state.signals.map(s => s.id === id ? { ...s, ...updates } : s)
-      })),
+      updateSignal: (id, updates) => {
+        set((state) => ({
+          signals: state.signals.map(s => s.id === id ? { ...s, ...updates } : s)
+        }))
+        get().triggerSync()
+      },
 
       // Onboarding
       onboardingCompleted: false,
@@ -339,12 +369,18 @@ Return the strategy using this exact structure:
 Each strategy must explore a different market inefficiency or behavioral pattern.
 If no truly new strategy can be generated, you must invent a new angle rather than repeating prior logic.`
       },
-      updateSettings: (updates) => set((state) => ({
-        settings: { ...state.settings, ...updates }
-      })),
-      updateSystemPrompt: (prompt) => set((state) => ({
-        settings: { ...state.settings, systemPrompt: prompt }
-      })),
+      updateSettings: (updates) => {
+        set((state) => ({
+          settings: { ...state.settings, ...updates }
+        }))
+        get().triggerSync()
+      },
+      updateSystemPrompt: (prompt) => {
+        set((state) => ({
+          settings: { ...state.settings, systemPrompt: prompt }
+        }))
+        get().triggerSync()
+      },
       updateApiKey: (provider, key) => set((state) => ({
         settings: {
           ...state.settings,
@@ -374,6 +410,154 @@ If no truly new strategy can be generated, you must invent a new angle rather th
       // Prompt detail
       selectedPromptId: null,
       setSelectedPromptId: (id) => set({ selectedPromptId: id }),
+
+      // Cloud Sync State
+      syncStatus: {
+        syncing: false,
+        lastSynced: null,
+        error: null,
+        loading: false
+      },
+
+      // Get Supabase client if configured
+      getClient: () => {
+        const state = get()
+        const { url, anonKey } = state.settings.supabase
+        if (url && anonKey) {
+          return getSupabaseClient(url, anonKey)
+        }
+        return null
+      },
+
+      // Sync all data to cloud
+      syncToCloud: async () => {
+        const state = get()
+        const client = state.getClient()
+
+        if (!client) {
+          return { success: false, error: 'Supabase not configured' }
+        }
+
+        set({ syncStatus: { ...state.syncStatus, syncing: true, error: null } })
+
+        try {
+          // Sync all data in parallel
+          const [promptsResult, signalsResult, settingsResult] = await Promise.all([
+            syncPrompts(client, state.prompts),
+            syncSignals(client, state.signals),
+            syncSettings(client, state.settings)
+          ])
+
+          const hasError = !promptsResult.success || !signalsResult.success || !settingsResult.success
+          const errorMsg = promptsResult.error || signalsResult.error || settingsResult.error
+
+          set({
+            syncStatus: {
+              syncing: false,
+              lastSynced: hasError ? state.syncStatus.lastSynced : new Date().toISOString(),
+              error: hasError ? errorMsg : null,
+              loading: false
+            }
+          })
+
+          // Update Supabase connected status
+          if (!hasError) {
+            set((s) => ({
+              settings: {
+                ...s.settings,
+                supabase: { ...s.settings.supabase, connected: true }
+              }
+            }))
+          }
+
+          return { success: !hasError, error: errorMsg }
+        } catch (err) {
+          set({
+            syncStatus: {
+              ...state.syncStatus,
+              syncing: false,
+              error: err.message,
+              loading: false
+            }
+          })
+          return { success: false, error: err.message }
+        }
+      },
+
+      // Load all data from cloud
+      loadFromCloud: async () => {
+        const state = get()
+        const client = state.getClient()
+
+        if (!client) {
+          return { success: false, error: 'Supabase not configured' }
+        }
+
+        set({ syncStatus: { ...state.syncStatus, loading: true, error: null } })
+
+        try {
+          const [promptsResult, signalsResult, settingsResult] = await Promise.all([
+            loadPrompts(client),
+            loadSignals(client),
+            loadSettings(client)
+          ])
+
+          // Merge cloud data with local (cloud takes precedence if newer)
+          if (promptsResult.success && promptsResult.data.length > 0) {
+            set({ prompts: promptsResult.data })
+          }
+
+          if (signalsResult.success && signalsResult.data.length > 0) {
+            set({ signals: signalsResult.data })
+          }
+
+          if (settingsResult.success && settingsResult.data) {
+            set((s) => ({
+              settings: {
+                ...s.settings,
+                aiProvider: settingsResult.data.aiProvider || s.settings.aiProvider,
+                aiModel: settingsResult.data.aiModel || s.settings.aiModel,
+                systemPrompt: settingsResult.data.systemPrompt || s.settings.systemPrompt
+              }
+            }))
+          }
+
+          set({
+            syncStatus: {
+              syncing: false,
+              lastSynced: new Date().toISOString(),
+              error: null,
+              loading: false
+            },
+            settings: {
+              ...get().settings,
+              supabase: { ...get().settings.supabase, connected: true }
+            }
+          })
+
+          return { success: true }
+        } catch (err) {
+          set({
+            syncStatus: {
+              ...state.syncStatus,
+              loading: false,
+              error: err.message
+            }
+          })
+          return { success: false, error: err.message }
+        }
+      },
+
+      // Auto-sync helper (debounced in real usage)
+      triggerSync: () => {
+        const state = get()
+        if (state.settings.supabase.connected && !state.syncStatus.syncing) {
+          // Debounce sync to avoid too many requests
+          setTimeout(() => {
+            get().syncToCloud()
+          }, 1000)
+        }
+      },
     }),
     {
       name: 'prompthatcher-storage',

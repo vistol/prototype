@@ -1,4 +1,5 @@
 import { motion } from 'framer-motion'
+import SyncStatus from './SyncStatus'
 
 export default function Header({ title, subtitle, rightAction }) {
   return (
@@ -14,9 +15,10 @@ export default function Header({ title, subtitle, rightAction }) {
             <p className="text-xs text-gray-500 mt-0.5">{subtitle}</p>
           )}
         </div>
-        {rightAction && (
-          <div>{rightAction}</div>
-        )}
+        <div className="flex items-center gap-3">
+          <SyncStatus />
+          {rightAction && rightAction}
+        </div>
       </div>
     </motion.header>
   )
