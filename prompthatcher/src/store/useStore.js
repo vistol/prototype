@@ -871,6 +871,7 @@ If no truly new strategy can be generated, you must invent a new angle rather th
       partialize: (state) => ({
         prompts: state.prompts,
         signals: state.signals,
+        eggs: state.eggs,
         settings: state.settings,
         onboardingCompleted: state.onboardingCompleted
       })
