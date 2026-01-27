@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Cpu, FileText, Database, ChevronRight, Eye, EyeOff, Check, X, AlertCircle, Edit3, Plus } from 'lucide-react'
+import { Cpu, FileText, Database, ChevronRight, Eye, EyeOff, Check, X, AlertCircle, Edit3, Plus, Crown, ChevronDown, ChevronUp } from 'lucide-react'
 import useStore from '../store/useStore'
 import Header from '../components/Header'
 
@@ -38,6 +38,7 @@ export default function Settings() {
     updateApiKey,
     updateSupabase,
     updatePrompt,
+    updateSystemPrompt,
     addPrompt,
     setNewPromptModalOpen
   } = useStore()
@@ -48,6 +49,14 @@ export default function Settings() {
   const [editContent, setEditContent] = useState('')
   const [testingConnection, setTestingConnection] = useState(false)
   const [connectionResult, setConnectionResult] = useState(null)
+  const [editingSystemPrompt, setEditingSystemPrompt] = useState(false)
+  const [systemPromptContent, setSystemPromptContent] = useState(settings.systemPrompt || '')
+  const [systemPromptExpanded, setSystemPromptExpanded] = useState(false)
+
+  const handleSaveSystemPrompt = () => {
+    updateSystemPrompt(systemPromptContent)
+    setEditingSystemPrompt(false)
+  }
 
   const handleSavePrompt = (promptId) => {
     updatePrompt(promptId, { content: editContent })
@@ -198,6 +207,105 @@ export default function Settings() {
               exit={{ opacity: 0, x: -20 }}
               className="space-y-4"
             >
+              {/* System Prompt (Parent) - Most Important */}
+              <div className="bg-gradient-to-br from-accent-cyan/10 to-electric-600/10 border-2 border-accent-cyan/30 rounded-xl overflow-hidden">
+                <div className="p-4">
+                  <div className="flex items-center justify-between mb-3">
+                    <div className="flex items-center gap-2">
+                      <div className="p-1.5 rounded-lg bg-accent-cyan/20">
+                        <Crown size={18} className="text-accent-cyan" />
+                      </div>
+                      <div>
+                        <h3 className="font-bold text-white">System Prompt</h3>
+                        <span className="text-xs text-accent-cyan">Parent prompt for AUTO mode</span>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={() => {
+                          if (editingSystemPrompt) {
+                            handleSaveSystemPrompt()
+                          } else {
+                            setEditingSystemPrompt(true)
+                            setSystemPromptContent(settings.systemPrompt || '')
+                          }
+                        }}
+                        className={`p-2 rounded-lg transition-colors ${
+                          editingSystemPrompt
+                            ? 'bg-accent-green/20 text-accent-green'
+                            : 'hover:bg-quant-surface text-gray-400'
+                        }`}
+                      >
+                        {editingSystemPrompt ? <Check size={16} /> : <Edit3 size={16} />}
+                      </button>
+                      {!editingSystemPrompt && (
+                        <button
+                          onClick={() => setSystemPromptExpanded(!systemPromptExpanded)}
+                          className="p-2 rounded-lg hover:bg-quant-surface text-gray-400 transition-colors"
+                        >
+                          {systemPromptExpanded ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+                        </button>
+                      )}
+                    </div>
+                  </div>
+
+                  {editingSystemPrompt ? (
+                    <div className="space-y-3">
+                      <textarea
+                        value={systemPromptContent}
+                        onChange={(e) => setSystemPromptContent(e.target.value)}
+                        className="w-full bg-quant-surface border border-quant-border rounded-lg px-3 py-2 text-sm text-white font-mono resize-none"
+                        rows={15}
+                      />
+                      <div className="flex gap-2">
+                        <button
+                          onClick={() => setEditingSystemPrompt(false)}
+                          className="flex-1 py-2 rounded-lg bg-quant-surface text-gray-400 hover:text-white transition-colors"
+                        >
+                          Cancel
+                        </button>
+                        <button
+                          onClick={handleSaveSystemPrompt}
+                          className="flex-1 py-2 rounded-lg bg-accent-cyan/20 text-accent-cyan hover:bg-accent-cyan/30 transition-colors"
+                        >
+                          Save Changes
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <>
+                      <p className={`text-sm text-gray-400 font-mono ${systemPromptExpanded ? '' : 'line-clamp-3'}`}>
+                        {settings.systemPrompt}
+                      </p>
+                      {!systemPromptExpanded && (
+                        <button
+                          onClick={() => setSystemPromptExpanded(true)}
+                          className="text-xs text-accent-cyan mt-2 hover:underline"
+                        >
+                          Show full prompt...
+                        </button>
+                      )}
+                    </>
+                  )}
+
+                  <div className="flex items-center gap-2 mt-3 pt-3 border-t border-accent-cyan/20">
+                    <span className="text-xs text-accent-cyan bg-accent-cyan/10 px-2 py-1 rounded-full">
+                      MASTER TEMPLATE
+                    </span>
+                    <span className="text-xs text-gray-500">
+                      All AUTO prompts inherit from this
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Divider */}
+              <div className="flex items-center gap-3">
+                <div className="flex-1 h-px bg-quant-border" />
+                <span className="text-xs text-gray-500">Child Prompts</span>
+                <div className="flex-1 h-px bg-quant-border" />
+              </div>
+
               {/* Add New Button */}
               <button
                 onClick={() => setNewPromptModalOpen(true)}

@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { motion } from 'framer-motion'
-import { X, Sparkles, PenTool, Clock, DollarSign, TrendingUp, Cpu, Target, Hash } from 'lucide-react'
+import { X, Sparkles, PenTool, Clock, DollarSign, TrendingUp, Cpu, Target, Hash, Crown } from 'lucide-react'
 import useStore from '../store/useStore'
 
 const executionTimes = [
@@ -17,7 +17,7 @@ const aiModels = [
 ]
 
 export default function NewPromptModal() {
-  const { setNewPromptModalOpen, addPrompt } = useStore()
+  const { setNewPromptModalOpen, addPrompt, settings } = useStore()
   const [mode, setMode] = useState('auto')
   const [name, setName] = useState('')
   const [content, setContent] = useState('')
@@ -31,8 +31,9 @@ export default function NewPromptModal() {
   const handleSubmit = () => {
     if (!name.trim()) return
 
+    // For AUTO mode, reference the system prompt as the base
     const promptContent = mode === 'auto'
-      ? `[AUTO-GENERATED] Maximize profit with ${executionTime} trading strategy using AI-optimized parameters.`
+      ? `[AUTO-GENERATED from System Prompt]\n\nExecution Context:\n- Timeframe: ${executionTime}\n- Capital: $${capital}\n- Leverage: ${leverage}x\n- Min IPE: ${minIpe}%\n- Results: ${numResults}\n\nThis prompt inherits from the master System Prompt and will generate trading strategies following the scientific method.`
       : content
 
     addPrompt({
@@ -45,7 +46,8 @@ export default function NewPromptModal() {
       aiModel,
       minIpe,
       numResults,
-      status: 'active'
+      status: 'active',
+      parentPrompt: mode === 'auto' ? 'system' : null
     })
 
     setNewPromptModalOpen(false)
@@ -113,6 +115,17 @@ export default function NewPromptModal() {
                 <span className="text-xs text-gray-500">Write your own</span>
               </button>
             </div>
+
+            {/* Auto mode info */}
+            {mode === 'auto' && (
+              <div className="mt-3 p-3 bg-accent-cyan/10 border border-accent-cyan/20 rounded-xl flex items-start gap-2">
+                <Crown size={16} className="text-accent-cyan shrink-0 mt-0.5" />
+                <p className="text-xs text-accent-cyan">
+                  This prompt will inherit from the <strong>System Prompt</strong> (master template)
+                  and generate unique trading strategies using the scientific method.
+                </p>
+              </div>
+            )}
           </div>
 
           {/* Name */}
