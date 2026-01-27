@@ -1,12 +1,12 @@
 import { useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Archive, MoreVertical, Trash2, Eye, Clock, TrendingUp, TrendingDown, ChevronDown, ChevronUp } from 'lucide-react'
+import { Archive, MoreVertical, Trash2, Eye, Clock, TrendingUp, TrendingDown, ChevronDown, ChevronUp, DollarSign } from 'lucide-react'
 import useStore from '../store/useStore'
 import Header from '../components/Header'
 import EggIcon from '../components/EggIcon'
 
 export default function Incubator() {
-  const { eggs, signals, deletePrompt, setSelectedPromptId } = useStore()
+  const { eggs, signals, prices, priceStatus, deletePrompt, setSelectedPromptId } = useStore()
   const [activeFilter, setActiveFilter] = useState('incubating')
   const [expandedEgg, setExpandedEgg] = useState(null)
 
@@ -39,6 +39,41 @@ export default function Incubator() {
     if (days > 0) return `${days}d ${hours % 24}h left`
     if (hours > 0) return `${hours}h left`
     return 'Less than 1h'
+  }
+
+  // Get current price for an asset
+  const getCurrentPrice = (asset) => {
+    return prices[asset]?.price || null
+  }
+
+  // Calculate unrealized PnL for a trade
+  const getUnrealizedPnl = (signal) => {
+    const currentPrice = getCurrentPrice(signal.asset)
+    if (!currentPrice || signal.status === 'closed') return null
+
+    const entry = parseFloat(signal.entry)
+    if (signal.strategy === 'LONG') {
+      return ((currentPrice - entry) / entry) * 100
+    } else {
+      return ((entry - currentPrice) / entry) * 100
+    }
+  }
+
+  // Calculate total unrealized PnL for an egg
+  const getEggUnrealizedPnl = (egg) => {
+    const eggSignals = signals.filter(s => egg.trades.includes(s.id) && s.status === 'active')
+    let totalPnl = 0
+    let hasPrice = false
+
+    eggSignals.forEach(signal => {
+      const pnl = getUnrealizedPnl(signal)
+      if (pnl !== null) {
+        totalPnl += pnl
+        hasPrice = true
+      }
+    })
+
+    return hasPrice ? totalPnl / eggSignals.length : null
   }
 
   return (
@@ -101,6 +136,7 @@ export default function Incubator() {
               const progress = getEggProgress(egg)
               const eggSignals = signals.filter(s => egg.trades.includes(s.id))
               const isExpanded = expandedEgg === egg.id
+              const eggPnl = egg.status === 'incubating' ? getEggUnrealizedPnl(egg) : null
 
               return (
                 <motion.div
@@ -131,16 +167,26 @@ export default function Incubator() {
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center justify-between">
                           <h3 className="font-semibold text-white truncate">{egg.promptName}</h3>
-                          <button
-                            onClick={() => setExpandedEgg(isExpanded ? null : egg.id)}
-                            className="p-1.5 rounded-lg hover:bg-quant-surface transition-colors"
-                          >
-                            {isExpanded ? (
-                              <ChevronUp size={18} className="text-gray-400" />
-                            ) : (
-                              <ChevronDown size={18} className="text-gray-400" />
+                          <div className="flex items-center gap-2">
+                            {/* Live PnL indicator for incubating eggs */}
+                            {eggPnl !== null && (
+                              <span className={`text-sm font-mono font-bold ${
+                                eggPnl >= 0 ? 'text-accent-green' : 'text-accent-red'
+                              }`}>
+                                {eggPnl >= 0 ? '+' : ''}{eggPnl.toFixed(2)}%
+                              </span>
                             )}
-                          </button>
+                            <button
+                              onClick={() => setExpandedEgg(isExpanded ? null : egg.id)}
+                              className="p-1.5 rounded-lg hover:bg-quant-surface transition-colors"
+                            >
+                              {isExpanded ? (
+                                <ChevronUp size={18} className="text-gray-400" />
+                              ) : (
+                                <ChevronDown size={18} className="text-gray-400" />
+                              )}
+                            </button>
+                          </div>
                         </div>
 
                         {/* Meta info */}
@@ -152,6 +198,12 @@ export default function Incubator() {
                             <Clock size={12} />
                             {getTimeRemaining(egg)}
                           </span>
+                          {priceStatus.lastUpdated && egg.status === 'incubating' && (
+                            <span className="text-[10px] text-gray-600 flex items-center gap-1">
+                              <span className="w-1 h-1 bg-accent-green rounded-full animate-pulse" />
+                              Live
+                            </span>
+                          )}
                         </div>
 
                         {/* Progress Bar */}
@@ -222,6 +274,8 @@ export default function Incubator() {
                           {eggSignals.map((signal) => {
                             const isLong = signal.strategy === 'LONG'
                             const isClosed = signal.status === 'closed'
+                            const currentPrice = getCurrentPrice(signal.asset)
+                            const unrealizedPnl = getUnrealizedPnl(signal)
 
                             return (
                               <div
@@ -262,6 +316,12 @@ export default function Incubator() {
                                       }`}>
                                         {signal.pnl >= 0 ? '+' : ''}{signal.pnl?.toFixed(2) || '0.00'}
                                       </span>
+                                    ) : unrealizedPnl !== null ? (
+                                      <span className={`text-sm font-mono font-bold ${
+                                        unrealizedPnl >= 0 ? 'text-accent-green' : 'text-accent-red'
+                                      }`}>
+                                        {unrealizedPnl >= 0 ? '+' : ''}{unrealizedPnl.toFixed(2)}%
+                                      </span>
                                     ) : (
                                       <span className="text-xs text-accent-cyan flex items-center gap-1">
                                         <span className="w-1.5 h-1.5 bg-accent-cyan rounded-full animate-pulse" />
@@ -275,18 +335,62 @@ export default function Incubator() {
                                   <span className="text-gray-500">
                                     Entry: <span className="text-white font-mono">${signal.entry}</span>
                                   </span>
+                                  {/* Current price if available */}
+                                  {currentPrice && !isClosed && (
+                                    <span className="text-accent-cyan flex items-center gap-1">
+                                      <DollarSign size={10} />
+                                      <span className="font-mono">{currentPrice.toFixed(2)}</span>
+                                    </span>
+                                  )}
                                   <span className="text-accent-green">
                                     TP: ${signal.takeProfit}
                                   </span>
                                   <span className="text-accent-red">
                                     SL: ${signal.stopLoss}
                                   </span>
-                                  <span className={`font-bold ${
-                                    signal.ipe >= 80 ? 'text-accent-green' : 'text-accent-yellow'
-                                  }`}>
-                                    {signal.ipe}%
-                                  </span>
                                 </div>
+
+                                {/* Progress to TP/SL */}
+                                {currentPrice && !isClosed && (
+                                  <div className="mt-2">
+                                    <div className="h-1.5 bg-quant-surface rounded-full overflow-hidden flex">
+                                      {(() => {
+                                        const entry = parseFloat(signal.entry)
+                                        const tp = parseFloat(signal.takeProfit)
+                                        const sl = parseFloat(signal.stopLoss)
+
+                                        let progressToTp, progressToSl
+
+                                        if (isLong) {
+                                          const range = tp - sl
+                                          const position = ((currentPrice - sl) / range) * 100
+                                          progressToTp = Math.max(0, Math.min(100, position))
+                                        } else {
+                                          const range = sl - tp
+                                          const position = ((sl - currentPrice) / range) * 100
+                                          progressToTp = Math.max(0, Math.min(100, position))
+                                        }
+
+                                        return (
+                                          <motion.div
+                                            initial={{ width: 0 }}
+                                            animate={{ width: `${progressToTp}%` }}
+                                            className={`h-full ${
+                                              progressToTp > 50
+                                                ? 'bg-gradient-to-r from-accent-yellow to-accent-green'
+                                                : 'bg-gradient-to-r from-accent-red to-accent-yellow'
+                                            }`}
+                                          />
+                                        )
+                                      })()}
+                                    </div>
+                                    <div className="flex justify-between text-[10px] mt-0.5">
+                                      <span className="text-accent-red">SL</span>
+                                      <span className="text-gray-500">Entry</span>
+                                      <span className="text-accent-green">TP</span>
+                                    </div>
+                                  </div>
+                                )}
                               </div>
                             )
                           })}

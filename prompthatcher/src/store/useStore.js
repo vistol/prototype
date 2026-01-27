@@ -11,6 +11,16 @@ import {
   deletePromptFromCloud
 } from '../lib/supabase'
 import { generateTradesFromPrompt } from '../lib/aiService'
+import {
+  fetchPrices,
+  fetchBinance24hStats,
+  calculateTradeStatus,
+  calculatePnL,
+  SUPPORTED_PAIRS
+} from '../lib/priceService'
+
+// Price refresh interval (15 minutes)
+const PRICE_REFRESH_INTERVAL = 15 * 60 * 1000
 
 // Execution time limits in milliseconds
 const EXECUTION_LIMITS = {
@@ -453,6 +463,10 @@ const useStore = create(
           anonKey: '',
           connected: false
         },
+        tradingPlatform: {
+          primary: 'binance',
+          secondary: 'tradingview'
+        },
         systemPrompt: `You are an autonomous quantitative research agent specialized in cryptocurrency markets.
 
 Your task is to generate ONE completely new trading strategy every time you are invoked.
@@ -579,6 +593,192 @@ If no truly new strategy can be generated, you must invent a new angle rather th
           supabase: { ...state.settings.supabase, ...updates }
         }
       })),
+      updateTradingPlatform: (updates) => set((state) => ({
+        settings: {
+          ...state.settings,
+          tradingPlatform: { ...state.settings.tradingPlatform, ...updates }
+        }
+      })),
+
+      // Price State
+      prices: {},
+      priceStatus: {
+        isFetching: false,
+        lastUpdated: null,
+        error: null,
+        source: null,
+        fallbackUsed: false
+      },
+      priceRefreshInterval: null,
+
+      // Fetch prices for all active trades
+      fetchAllPrices: async () => {
+        const state = get()
+        const { primary, secondary } = state.settings.tradingPlatform
+
+        // Get unique assets from active signals and eggs
+        const activeSignals = state.signals.filter(s => s.status === 'active')
+        const incubatingEggs = state.eggs.filter(e => e.status === 'incubating')
+        const eggTradeIds = incubatingEggs.flatMap(e => e.trades)
+        const eggSignals = state.signals.filter(s => eggTradeIds.includes(s.id) && s.status === 'active')
+
+        const allActiveSignals = [...activeSignals, ...eggSignals]
+        const uniqueAssets = [...new Set(allActiveSignals.map(s => s.asset))]
+
+        if (uniqueAssets.length === 0) {
+          // If no active trades, still fetch main pairs for display
+          uniqueAssets.push('BTC/USDT', 'ETH/USDT')
+        }
+
+        set({
+          priceStatus: { ...state.priceStatus, isFetching: true, error: null }
+        })
+
+        try {
+          const result = await fetchPrices(uniqueAssets, primary, secondary)
+
+          if (result.error) {
+            set({
+              priceStatus: {
+                isFetching: false,
+                lastUpdated: state.priceStatus.lastUpdated,
+                error: result.error,
+                source: null,
+                fallbackUsed: false
+              }
+            })
+            return { success: false, error: result.error }
+          }
+
+          set({
+            prices: { ...state.prices, ...result.prices },
+            priceStatus: {
+              isFetching: false,
+              lastUpdated: new Date().toISOString(),
+              error: null,
+              source: result.source,
+              fallbackUsed: result.fallbackUsed || false
+            }
+          })
+
+          // After fetching prices, update trade statuses
+          get().updateTradeStatuses()
+
+          return { success: true, prices: result.prices }
+        } catch (error) {
+          set({
+            priceStatus: {
+              ...state.priceStatus,
+              isFetching: false,
+              error: error.message
+            }
+          })
+          return { success: false, error: error.message }
+        }
+      },
+
+      // Update trade statuses based on current prices
+      updateTradeStatuses: () => {
+        const state = get()
+        const { prices, signals, eggs, settings } = state
+
+        let signalsUpdated = false
+        const updatedSignals = signals.map(signal => {
+          if (signal.status !== 'active') return signal
+
+          const priceData = prices[signal.asset]
+          if (!priceData) return signal
+
+          const currentPrice = priceData.price
+          const tradeStatus = calculateTradeStatus(signal, currentPrice)
+
+          if (tradeStatus.status === 'win' || tradeStatus.status === 'loss') {
+            signalsUpdated = true
+            // Find which egg this trade belongs to
+            const egg = eggs.find(e => e.trades.includes(signal.id))
+            const capital = egg ? (egg.totalCapital / egg.trades.length) : 100
+
+            return {
+              ...signal,
+              status: 'closed',
+              result: tradeStatus.status,
+              exitPrice: tradeStatus.exitPrice,
+              pnl: (tradeStatus.pnlPercent / 100) * capital,
+              closedAt: new Date().toISOString()
+            }
+          }
+
+          return {
+            ...signal,
+            currentPrice,
+            unrealizedPnl: tradeStatus.pnlPercent
+          }
+        })
+
+        if (signalsUpdated) {
+          set({ signals: updatedSignals })
+
+          // Check if any eggs should hatch
+          eggs.filter(e => e.status === 'incubating').forEach(egg => {
+            get().checkEggHatch(egg.id)
+          })
+
+          get().triggerSync()
+        } else {
+          set({ signals: updatedSignals })
+        }
+      },
+
+      // Start auto-refresh interval
+      startPriceRefresh: () => {
+        const state = get()
+
+        // Clear existing interval if any
+        if (state.priceRefreshInterval) {
+          clearInterval(state.priceRefreshInterval)
+        }
+
+        // Initial fetch
+        get().fetchAllPrices()
+
+        // Set up interval
+        const intervalId = setInterval(() => {
+          get().fetchAllPrices()
+        }, PRICE_REFRESH_INTERVAL)
+
+        set({ priceRefreshInterval: intervalId })
+      },
+
+      // Stop auto-refresh interval
+      stopPriceRefresh: () => {
+        const state = get()
+        if (state.priceRefreshInterval) {
+          clearInterval(state.priceRefreshInterval)
+          set({ priceRefreshInterval: null })
+        }
+      },
+
+      // Manual price refresh (sync button)
+      refreshPrices: async () => {
+        return await get().fetchAllPrices()
+      },
+
+      // Get price for a specific asset
+      getPrice: (asset) => {
+        const state = get()
+        return state.prices[asset]?.price || null
+      },
+
+      // Get 24h stats for an asset
+      fetch24hStats: async (asset) => {
+        try {
+          const stats = await fetchBinance24hStats(asset)
+          return stats
+        } catch (error) {
+          console.error('Failed to fetch 24h stats:', error)
+          return null
+        }
+      },
 
       // UI State
       activeTab: 'incubator',

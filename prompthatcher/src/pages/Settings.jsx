@@ -1,10 +1,27 @@
 import { useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Cpu, FileText, Database, ChevronRight, Eye, EyeOff, Check, X, AlertCircle, Edit3, Plus, Crown, ChevronDown, ChevronUp, Cloud, RefreshCw, Download, Upload } from 'lucide-react'
+import { Cpu, FileText, Database, ChevronRight, Eye, EyeOff, Check, X, AlertCircle, Edit3, Plus, Crown, ChevronDown, ChevronUp, Cloud, RefreshCw, Download, Upload, Activity, TrendingUp } from 'lucide-react'
 import useStore from '../store/useStore'
 import Header from '../components/Header'
 
 const tabs = ['AI Provider', 'Prompts', 'System']
+
+const tradingPlatforms = [
+  {
+    id: 'binance',
+    name: 'Binance',
+    description: 'Largest crypto exchange by volume',
+    icon: '🔶',
+    color: 'from-yellow-500 to-orange-500'
+  },
+  {
+    id: 'tradingview',
+    name: 'TradingView',
+    description: 'Advanced charting platform',
+    icon: '📊',
+    color: 'from-blue-500 to-purple-500'
+  }
+]
 
 const aiProviders = [
   {
@@ -37,13 +54,16 @@ export default function Settings() {
     updateSettings,
     updateApiKey,
     updateSupabase,
+    updateTradingPlatform,
     updatePrompt,
     updateSystemPrompt,
     addPrompt,
     setNewPromptModalOpen,
     syncToCloud,
     loadFromCloud,
-    syncStatus
+    syncStatus,
+    priceStatus,
+    refreshPrices
   } = useStore()
 
   const [activeTab, setActiveTab] = useState(0)
@@ -388,6 +408,146 @@ export default function Settings() {
               exit={{ opacity: 0, x: -20 }}
               className="space-y-4"
             >
+              {/* Trading Platforms */}
+              <div className="bg-quant-card border border-quant-border rounded-xl p-4">
+                <div className="flex items-center gap-3 mb-4">
+                  <div className="p-2 rounded-lg bg-accent-green/20">
+                    <Activity size={20} className="text-accent-green" />
+                  </div>
+                  <div className="flex-1">
+                    <h3 className="font-semibold text-white">Trading Platforms</h3>
+                    <span className="text-xs text-gray-500">Real-time price data sources</span>
+                  </div>
+                  {priceStatus.lastUpdated && (
+                    <div className="flex items-center gap-1 text-xs">
+                      <div className={`w-2 h-2 rounded-full ${priceStatus.error ? 'bg-accent-red' : 'bg-accent-green'} animate-pulse`} />
+                      <span className="text-gray-400">
+                        {priceStatus.source === 'binance' ? 'BN' : 'TV'}
+                      </span>
+                    </div>
+                  )}
+                </div>
+
+                <div className="space-y-4">
+                  {/* Primary Platform */}
+                  <div>
+                    <label className="text-xs text-gray-400 block mb-2 flex items-center gap-2">
+                      <span className="w-4 h-4 rounded-full bg-accent-cyan/20 flex items-center justify-center text-[10px] text-accent-cyan font-bold">1</span>
+                      Primary Platform
+                    </label>
+                    <div className="grid grid-cols-2 gap-2">
+                      {tradingPlatforms.map((platform) => (
+                        <button
+                          key={platform.id}
+                          onClick={() => updateTradingPlatform({ primary: platform.id })}
+                          className={`p-3 rounded-xl border transition-all ${
+                            settings.tradingPlatform?.primary === platform.id
+                              ? 'bg-accent-cyan/10 border-accent-cyan'
+                              : 'bg-quant-surface border-quant-border hover:border-gray-600'
+                          }`}
+                        >
+                          <div className="flex items-center gap-2">
+                            <span className="text-xl">{platform.icon}</span>
+                            <div className="text-left">
+                              <span className="text-sm font-medium text-white block">{platform.name}</span>
+                              <span className="text-[10px] text-gray-500">{platform.description}</span>
+                            </div>
+                          </div>
+                          {settings.tradingPlatform?.primary === platform.id && (
+                            <div className="flex justify-end mt-2">
+                              <Check size={14} className="text-accent-cyan" />
+                            </div>
+                          )}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Secondary Platform (Fallback) */}
+                  <div>
+                    <label className="text-xs text-gray-400 block mb-2 flex items-center gap-2">
+                      <span className="w-4 h-4 rounded-full bg-accent-yellow/20 flex items-center justify-center text-[10px] text-accent-yellow font-bold">2</span>
+                      Fallback Platform
+                    </label>
+                    <div className="grid grid-cols-2 gap-2">
+                      {tradingPlatforms
+                        .filter(p => p.id !== settings.tradingPlatform?.primary)
+                        .map((platform) => (
+                          <button
+                            key={platform.id}
+                            onClick={() => updateTradingPlatform({ secondary: platform.id })}
+                            className={`p-3 rounded-xl border transition-all ${
+                              settings.tradingPlatform?.secondary === platform.id
+                                ? 'bg-accent-yellow/10 border-accent-yellow'
+                                : 'bg-quant-surface border-quant-border hover:border-gray-600'
+                            }`}
+                          >
+                            <div className="flex items-center gap-2">
+                              <span className="text-xl">{platform.icon}</span>
+                              <div className="text-left">
+                                <span className="text-sm font-medium text-white block">{platform.name}</span>
+                                <span className="text-[10px] text-gray-500">Backup source</span>
+                              </div>
+                            </div>
+                            {settings.tradingPlatform?.secondary === platform.id && (
+                              <div className="flex justify-end mt-2">
+                                <Check size={14} className="text-accent-yellow" />
+                              </div>
+                            )}
+                          </button>
+                        ))}
+                    </div>
+                  </div>
+
+                  {/* Price Status */}
+                  <div className="pt-3 border-t border-quant-border">
+                    <div className="flex items-center justify-between mb-3">
+                      <span className="text-xs text-gray-400">Price Refresh</span>
+                      <span className="text-xs text-gray-500">Every 15 minutes</span>
+                    </div>
+
+                    <button
+                      onClick={() => refreshPrices()}
+                      disabled={priceStatus.isFetching}
+                      className={`w-full py-3 rounded-xl font-medium flex items-center justify-center gap-2 transition-all ${
+                        priceStatus.isFetching
+                          ? 'bg-quant-surface text-gray-400'
+                          : 'bg-accent-green/20 text-accent-green hover:bg-accent-green/30'
+                      }`}
+                    >
+                      <RefreshCw size={16} className={priceStatus.isFetching ? 'animate-spin' : ''} />
+                      {priceStatus.isFetching ? 'Fetching Prices...' : 'Refresh Prices Now'}
+                    </button>
+
+                    {/* Last Update Info */}
+                    <div className="flex items-center justify-between mt-3 text-xs">
+                      <span className="text-gray-500">Last updated:</span>
+                      <span className="text-gray-400 font-mono">
+                        {priceStatus.lastUpdated
+                          ? new Date(priceStatus.lastUpdated).toLocaleString()
+                          : 'Never'
+                        }
+                      </span>
+                    </div>
+
+                    {priceStatus.fallbackUsed && (
+                      <div className="flex items-center gap-2 p-2 rounded-lg bg-accent-yellow/20 text-accent-yellow text-xs mt-2">
+                        <AlertCircle size={14} />
+                        <span>Using fallback platform (primary unavailable)</span>
+                      </div>
+                    )}
+
+                    {priceStatus.error && (
+                      <div className="flex items-center gap-2 p-2 rounded-lg bg-accent-red/20 text-accent-red text-xs mt-2">
+                        <AlertCircle size={14} />
+                        <span>{priceStatus.error}</span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {/* Supabase */}
               <div className="bg-quant-card border border-quant-border rounded-xl p-4">
                 <div className="flex items-center gap-3 mb-4">
                   <div className="p-2 rounded-lg bg-accent-cyan/20">

@@ -1,3 +1,4 @@
+import { useEffect } from 'react'
 import { AnimatePresence } from 'framer-motion'
 import useStore from './store/useStore'
 import BottomNav from './components/BottomNav'
@@ -18,8 +19,23 @@ function App() {
     setNewPromptModalOpen,
     isSignalDetailOpen,
     selectedPromptId,
-    onboardingCompleted
+    onboardingCompleted,
+    startPriceRefresh,
+    stopPriceRefresh
   } = useStore()
+
+  // Start price refresh interval when app loads
+  useEffect(() => {
+    if (onboardingCompleted) {
+      // Start automatic price refresh (every 15 minutes)
+      startPriceRefresh()
+
+      // Cleanup on unmount
+      return () => {
+        stopPriceRefresh()
+      }
+    }
+  }, [onboardingCompleted, startPriceRefresh, stopPriceRefresh])
 
   // Show onboarding if not completed
   if (!onboardingCompleted) {
