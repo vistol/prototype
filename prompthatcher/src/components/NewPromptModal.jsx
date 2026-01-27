@@ -1,7 +1,8 @@
 import { useState } from 'react'
-import { motion } from 'framer-motion'
-import { X, Sparkles, PenTool, Clock, DollarSign, TrendingUp, Cpu, Target, Hash, Crown } from 'lucide-react'
+import { motion, AnimatePresence } from 'framer-motion'
+import { X, Sparkles, PenTool, Clock, DollarSign, TrendingUp, Cpu, Target, Hash, Crown, ArrowRight } from 'lucide-react'
 import useStore from '../store/useStore'
+import TradeSelectionModal from './TradeSelectionModal'
 
 const executionTimes = [
   { id: 'target', label: 'Target Based', desc: 'Until SL/TP hit' },
@@ -17,7 +18,7 @@ const aiModels = [
 ]
 
 export default function NewPromptModal() {
-  const { setNewPromptModalOpen, addPrompt, settings } = useStore()
+  const { setNewPromptModalOpen, addPrompt, generateTrades, settings } = useStore()
   const [mode, setMode] = useState('auto')
   const [name, setName] = useState('')
   const [content, setContent] = useState('')
@@ -28,7 +29,11 @@ export default function NewPromptModal() {
   const [minIpe, setMinIpe] = useState(80)
   const [numResults, setNumResults] = useState(3)
 
-  const handleSubmit = () => {
+  // Step management: 'config' -> 'selection'
+  const [step, setStep] = useState('config')
+  const [currentPrompt, setCurrentPrompt] = useState(null)
+
+  const handleSubmit = async () => {
     if (!name.trim()) return
 
     // For AUTO mode, reference the system prompt as the base
@@ -36,7 +41,9 @@ export default function NewPromptModal() {
       ? `[AUTO-GENERATED from System Prompt]\n\nExecution Context:\n- Timeframe: ${executionTime}\n- Capital: $${capital}\n- Leverage: ${leverage}x\n- Min IPE: ${minIpe}%\n- Results: ${numResults}\n\nThis prompt inherits from the master System Prompt and will generate trading strategies following the scientific method.`
       : content
 
-    addPrompt({
+    // Create the prompt
+    const prompt = {
+      id: `prompt-${Date.now()}`,
       name: name.trim(),
       content: promptContent,
       mode,
@@ -47,10 +54,41 @@ export default function NewPromptModal() {
       minIpe,
       numResults,
       status: 'active',
-      parentPrompt: mode === 'auto' ? 'system' : null
-    })
+      parentPrompt: mode === 'auto' ? 'system' : null,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    }
 
+    // Add prompt to store
+    addPrompt(prompt)
+    setCurrentPrompt(prompt)
+
+    // Generate trades
+    await generateTrades(prompt)
+
+    // Move to selection step
+    setStep('selection')
+  }
+
+  const handleTradeSelectionComplete = (egg) => {
+    // Close modal after egg is created
     setNewPromptModalOpen(false)
+  }
+
+  const handleTradeSelectionCancel = () => {
+    // Go back to config or close
+    setStep('config')
+  }
+
+  // Show trade selection modal
+  if (step === 'selection' && currentPrompt) {
+    return (
+      <TradeSelectionModal
+        prompt={currentPrompt}
+        onClose={handleTradeSelectionCancel}
+        onComplete={handleTradeSelectionComplete}
+      />
+    )
   }
 
   return (
@@ -301,12 +339,13 @@ export default function NewPromptModal() {
             onClick={handleSubmit}
             disabled={!name.trim()}
             whileTap={{ scale: 0.98 }}
-            className="w-full py-4 rounded-xl bg-gradient-to-r from-accent-cyan to-electric-600 text-quant-bg font-bold text-lg disabled:opacity-50 disabled:cursor-not-allowed"
+            className="w-full py-4 rounded-xl bg-gradient-to-r from-accent-cyan to-electric-600 text-quant-bg font-bold text-lg disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
             style={{
               boxShadow: name.trim() ? '0 0 30px rgba(0, 240, 255, 0.3)' : 'none'
             }}
           >
-            Start Incubation
+            Generate Trades
+            <ArrowRight size={20} />
           </motion.button>
         </div>
       </motion.div>

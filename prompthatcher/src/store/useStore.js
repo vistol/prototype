@@ -10,6 +10,31 @@ import {
   loadSettings,
   deletePromptFromCloud
 } from '../lib/supabase'
+import { generateTradesFromPrompt } from '../lib/aiService'
+
+// Execution time limits in milliseconds
+const EXECUTION_LIMITS = {
+  target: null, // No time limit, only SL/TP
+  scalping: 60 * 60 * 1000, // 1 hour max
+  intraday: 24 * 60 * 60 * 1000, // 24 hours max
+  swing: 7 * 24 * 60 * 60 * 1000 // 7 days max
+}
+
+// Sample Eggs (incubating trade groups)
+const initialEggs = [
+  {
+    id: 'egg-1',
+    promptId: 'prompt-1',
+    promptName: 'Alpha Momentum',
+    status: 'incubating', // incubating | hatched
+    trades: ['sig-1', 'sig-2'],
+    totalCapital: 1000,
+    executionTime: 'intraday',
+    createdAt: '2024-01-22T10:00:00Z',
+    hatchedAt: null,
+    results: null
+  }
+]
 
 // Sample data generators
 const generateSignal = (promptId, promptName) => ({
@@ -240,6 +265,167 @@ const useStore = create(
           signals: state.signals.map(s => s.id === id ? { ...s, ...updates } : s)
         }))
         get().triggerSync()
+      },
+
+      // Eggs (incubating trade groups)
+      eggs: initialEggs,
+
+      // Pending trades (generated but not yet selected for incubation)
+      pendingTrades: [],
+      isGeneratingTrades: false,
+      generationError: null,
+
+      // Generate trades from prompt using AI
+      generateTrades: async (prompt) => {
+        set({ isGeneratingTrades: true, generationError: null, pendingTrades: [] })
+
+        try {
+          const numResults = prompt.numResults || 3
+          const trades = await generateTradesFromPrompt(prompt, get().settings, numResults)
+
+          set({
+            pendingTrades: trades,
+            isGeneratingTrades: false
+          })
+
+          return { success: true, trades }
+        } catch (error) {
+          set({
+            isGeneratingTrades: false,
+            generationError: error.message
+          })
+          return { success: false, error: error.message }
+        }
+      },
+
+      // Toggle trade selection
+      toggleTradeSelection: (tradeId) => {
+        set((state) => ({
+          pendingTrades: state.pendingTrades.map(t =>
+            t.id === tradeId ? { ...t, selected: !t.selected } : t
+          )
+        }))
+      },
+
+      // Select all trades
+      selectAllTrades: () => {
+        set((state) => ({
+          pendingTrades: state.pendingTrades.map(t => ({ ...t, selected: true }))
+        }))
+      },
+
+      // Clear pending trades
+      clearPendingTrades: () => {
+        set({ pendingTrades: [], generationError: null })
+      },
+
+      // Create egg from selected trades (start incubation)
+      createEgg: (prompt) => {
+        const state = get()
+        const selectedTrades = state.pendingTrades.filter(t => t.selected)
+
+        if (selectedTrades.length === 0) return null
+
+        // Add trades to signals with 'active' status
+        const newSignals = selectedTrades.map(t => ({
+          ...t,
+          status: 'active',
+          selected: undefined // Remove selection flag
+        }))
+
+        // Create the egg
+        const egg = {
+          id: `egg-${Date.now()}`,
+          promptId: prompt.id,
+          promptName: prompt.name,
+          status: 'incubating',
+          trades: newSignals.map(s => s.id),
+          totalCapital: selectedTrades.reduce((sum, t) => sum + (t.capital || 0), 0),
+          executionTime: prompt.executionTime,
+          expiresAt: EXECUTION_LIMITS[prompt.executionTime]
+            ? new Date(Date.now() + EXECUTION_LIMITS[prompt.executionTime]).toISOString()
+            : null,
+          createdAt: new Date().toISOString(),
+          hatchedAt: null,
+          results: null
+        }
+
+        set((state) => ({
+          signals: [...newSignals, ...state.signals],
+          eggs: [egg, ...state.eggs],
+          pendingTrades: []
+        }))
+
+        get().triggerSync()
+
+        return egg
+      },
+
+      // Update egg status
+      updateEgg: (eggId, updates) => {
+        set((state) => ({
+          eggs: state.eggs.map(e =>
+            e.id === eggId ? { ...e, ...updates } : e
+          )
+        }))
+        get().triggerSync()
+      },
+
+      // Check if egg should hatch (all trades executed)
+      checkEggHatch: (eggId) => {
+        const state = get()
+        const egg = state.eggs.find(e => e.id === eggId)
+
+        if (!egg || egg.status === 'hatched') return false
+
+        const eggSignals = state.signals.filter(s => egg.trades.includes(s.id))
+        const allClosed = eggSignals.every(s => s.status === 'closed')
+
+        if (allClosed) {
+          // Calculate results
+          const wins = eggSignals.filter(s => s.result === 'win').length
+          const losses = eggSignals.filter(s => s.result === 'loss').length
+          const totalPnl = eggSignals.reduce((sum, s) => sum + (s.pnl || 0), 0)
+          const winRate = eggSignals.length > 0 ? (wins / eggSignals.length) * 100 : 0
+
+          const results = {
+            totalTrades: eggSignals.length,
+            wins,
+            losses,
+            winRate: Math.round(winRate),
+            totalPnl,
+            profitFactor: losses > 0
+              ? Math.abs(eggSignals.filter(s => s.result === 'win').reduce((sum, s) => sum + (s.pnl || 0), 0)) /
+                Math.abs(eggSignals.filter(s => s.result === 'loss').reduce((sum, s) => sum + (s.pnl || 0), 0))
+              : wins > 0 ? Infinity : 0
+          }
+
+          set((state) => ({
+            eggs: state.eggs.map(e =>
+              e.id === eggId ? {
+                ...e,
+                status: 'hatched',
+                hatchedAt: new Date().toISOString(),
+                results
+              } : e
+            )
+          }))
+
+          get().triggerSync()
+          return true
+        }
+
+        return false
+      },
+
+      // Get incubating eggs
+      getIncubatingEggs: () => {
+        return get().eggs.filter(e => e.status === 'incubating')
+      },
+
+      // Get hatched eggs
+      getHatchedEggs: () => {
+        return get().eggs.filter(e => e.status === 'hatched')
       },
 
       // Onboarding

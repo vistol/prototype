@@ -1,22 +1,44 @@
 import { useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Archive, Play, Pause, MoreVertical, Trash2, Eye } from 'lucide-react'
+import { Archive, MoreVertical, Trash2, Eye, Clock, TrendingUp, TrendingDown, ChevronDown, ChevronUp } from 'lucide-react'
 import useStore from '../store/useStore'
 import Header from '../components/Header'
 import EggIcon from '../components/EggIcon'
 
 export default function Incubator() {
-  const { prompts, archivePrompt, deletePrompt, setSelectedPromptId, addSignal } = useStore()
-  const [activeFilter, setActiveFilter] = useState('active')
-  const [menuOpen, setMenuOpen] = useState(null)
+  const { eggs, signals, deletePrompt, setSelectedPromptId } = useStore()
+  const [activeFilter, setActiveFilter] = useState('incubating')
+  const [expandedEgg, setExpandedEgg] = useState(null)
 
-  const filteredPrompts = prompts.filter(p =>
-    activeFilter === 'active' ? p.status === 'active' : p.status === 'archived'
+  const filteredEggs = eggs.filter(e =>
+    activeFilter === 'incubating' ? e.status === 'incubating' : e.status === 'hatched'
   )
 
-  const handleRunPrompt = (promptId) => {
-    addSignal(promptId)
-    setMenuOpen(null)
+  const getEggProgress = (egg) => {
+    const eggSignals = signals.filter(s => egg.trades.includes(s.id))
+    const closedCount = eggSignals.filter(s => s.status === 'closed').length
+    return {
+      total: eggSignals.length,
+      closed: closedCount,
+      active: eggSignals.length - closedCount,
+      percentage: eggSignals.length > 0 ? (closedCount / eggSignals.length) * 100 : 0
+    }
+  }
+
+  const getTimeRemaining = (egg) => {
+    if (!egg.expiresAt) return 'Target-based'
+    const now = new Date()
+    const expires = new Date(egg.expiresAt)
+    const diff = expires - now
+
+    if (diff <= 0) return 'Expired'
+
+    const hours = Math.floor(diff / (1000 * 60 * 60))
+    const days = Math.floor(hours / 24)
+
+    if (days > 0) return `${days}d ${hours % 24}h left`
+    if (hours > 0) return `${hours}h left`
+    return 'Less than 1h'
   }
 
   return (
@@ -27,201 +49,257 @@ export default function Incubator() {
     >
       <Header
         title="Incubator"
-        subtitle={`${filteredPrompts.length} prompts ${activeFilter}`}
+        subtitle={`${filteredEggs.length} eggs ${activeFilter}`}
       />
 
       {/* Filter Tabs */}
       <div className="px-4 py-3 flex gap-2">
         <button
-          onClick={() => setActiveFilter('active')}
+          onClick={() => setActiveFilter('incubating')}
           className={`flex-1 py-2.5 px-4 rounded-xl text-sm font-medium transition-all ${
-            activeFilter === 'active'
+            activeFilter === 'incubating'
               ? 'bg-accent-cyan/20 text-accent-cyan border border-accent-cyan/30'
               : 'bg-quant-surface text-gray-400 border border-transparent'
           }`}
         >
-          Active
+          Incubating
         </button>
         <button
-          onClick={() => setActiveFilter('archived')}
+          onClick={() => setActiveFilter('hatched')}
           className={`flex-1 py-2.5 px-4 rounded-xl text-sm font-medium transition-all flex items-center justify-center gap-2 ${
-            activeFilter === 'archived'
+            activeFilter === 'hatched'
               ? 'bg-accent-cyan/20 text-accent-cyan border border-accent-cyan/30'
               : 'bg-quant-surface text-gray-400 border border-transparent'
           }`}
         >
           <Archive size={16} />
-          Archived
+          Hatched
         </button>
       </div>
 
-      {/* Prompts List */}
+      {/* Eggs List */}
       <div className="px-4 pb-4 space-y-3">
         <AnimatePresence mode="popLayout">
-          {filteredPrompts.length === 0 ? (
+          {filteredEggs.length === 0 ? (
             <motion.div
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               className="text-center py-16"
             >
               <div className="w-20 h-20 mx-auto mb-4 rounded-full bg-quant-surface flex items-center justify-center">
-                <EggIcon size={48} status="incubating" />
+                <EggIcon size={48} status={activeFilter === 'incubating' ? 'incubating' : 'hatched'} />
               </div>
-              <p className="text-gray-400 mb-2">No {activeFilter} prompts</p>
+              <p className="text-gray-400 mb-2">No {activeFilter} eggs</p>
               <p className="text-sm text-gray-500">
-                {activeFilter === 'active'
-                  ? 'Tap + to create your first prompt'
-                  : 'Archived prompts will appear here'}
+                {activeFilter === 'incubating'
+                  ? 'Tap + to create a new prompt and start incubating'
+                  : 'Hatched eggs will appear here'}
               </p>
             </motion.div>
           ) : (
-            filteredPrompts.map((prompt, index) => (
-              <motion.div
-                key={prompt.id}
-                layout
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, x: -100 }}
-                transition={{ delay: index * 0.05 }}
-                className="bg-quant-card border border-quant-border rounded-2xl p-4 card-hover"
-              >
-                <div className="flex items-start gap-3">
-                  {/* Egg Icon */}
-                  <div className="relative">
-                    <EggIcon
-                      size={56}
-                      status={prompt.status === 'active' ? 'incubating' : 'hatched'}
-                      winRate={prompt.winRate}
-                    />
-                    {prompt.status === 'active' && (
-                      <div className="absolute -bottom-1 -right-1 w-4 h-4 bg-accent-green rounded-full border-2 border-quant-card pulse-ring" />
-                    )}
-                  </div>
+            filteredEggs.map((egg, index) => {
+              const progress = getEggProgress(egg)
+              const eggSignals = signals.filter(s => egg.trades.includes(s.id))
+              const isExpanded = expandedEgg === egg.id
 
-                  {/* Content */}
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center justify-between">
-                      <h3 className="font-semibold text-white truncate">{prompt.name}</h3>
+              return (
+                <motion.div
+                  key={egg.id}
+                  layout
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, x: -100 }}
+                  transition={{ delay: index * 0.05 }}
+                  className="bg-quant-card border border-quant-border rounded-2xl overflow-hidden card-hover"
+                >
+                  {/* Main Content */}
+                  <div className="p-4">
+                    <div className="flex items-start gap-3">
+                      {/* Egg Icon */}
                       <div className="relative">
-                        <button
-                          onClick={() => setMenuOpen(menuOpen === prompt.id ? null : prompt.id)}
-                          className="p-1.5 rounded-lg hover:bg-quant-surface transition-colors"
-                        >
-                          <MoreVertical size={18} className="text-gray-400" />
-                        </button>
+                        <EggIcon
+                          size={56}
+                          status={egg.status}
+                          winRate={egg.results?.winRate || 0}
+                        />
+                        {egg.status === 'incubating' && progress.active > 0 && (
+                          <div className="absolute -bottom-1 -right-1 w-4 h-4 bg-accent-green rounded-full border-2 border-quant-card pulse-ring" />
+                        )}
+                      </div>
 
-                        {/* Dropdown Menu */}
-                        <AnimatePresence>
-                          {menuOpen === prompt.id && (
+                      {/* Content */}
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center justify-between">
+                          <h3 className="font-semibold text-white truncate">{egg.promptName}</h3>
+                          <button
+                            onClick={() => setExpandedEgg(isExpanded ? null : egg.id)}
+                            className="p-1.5 rounded-lg hover:bg-quant-surface transition-colors"
+                          >
+                            {isExpanded ? (
+                              <ChevronUp size={18} className="text-gray-400" />
+                            ) : (
+                              <ChevronDown size={18} className="text-gray-400" />
+                            )}
+                          </button>
+                        </div>
+
+                        {/* Meta info */}
+                        <div className="flex items-center gap-2 mt-1">
+                          <span className="text-xs px-2 py-0.5 rounded-full bg-accent-cyan/20 text-accent-cyan">
+                            {progress.total} trades
+                          </span>
+                          <span className="text-xs text-gray-500 flex items-center gap-1">
+                            <Clock size={12} />
+                            {getTimeRemaining(egg)}
+                          </span>
+                        </div>
+
+                        {/* Progress Bar */}
+                        <div className="mt-3">
+                          <div className="flex justify-between text-xs mb-1">
+                            <span className="text-gray-500">Progress</span>
+                            <span className="text-accent-cyan">
+                              {progress.closed}/{progress.total} executed
+                            </span>
+                          </div>
+                          <div className="h-2 bg-quant-surface rounded-full overflow-hidden">
                             <motion.div
-                              initial={{ opacity: 0, scale: 0.95, y: -10 }}
-                              animate={{ opacity: 1, scale: 1, y: 0 }}
-                              exit={{ opacity: 0, scale: 0.95, y: -10 }}
-                              className="absolute right-0 top-full mt-1 w-40 bg-quant-surface border border-quant-border rounded-xl overflow-hidden z-20 shadow-xl"
-                            >
-                              <button
-                                onClick={() => {
-                                  setSelectedPromptId(prompt.id)
-                                  setMenuOpen(null)
-                                }}
-                                className="w-full px-4 py-3 text-left text-sm text-gray-300 hover:bg-quant-border/50 flex items-center gap-2"
-                              >
-                                <Eye size={16} />
-                                View Details
-                              </button>
-                              {prompt.status === 'active' && (
-                                <button
-                                  onClick={() => handleRunPrompt(prompt.id)}
-                                  className="w-full px-4 py-3 text-left text-sm text-accent-cyan hover:bg-quant-border/50 flex items-center gap-2"
-                                >
-                                  <Play size={16} />
-                                  Run Now
-                                </button>
-                              )}
-                              <button
-                                onClick={() => {
-                                  archivePrompt(prompt.id)
-                                  setMenuOpen(null)
-                                }}
-                                className="w-full px-4 py-3 text-left text-sm text-gray-300 hover:bg-quant-border/50 flex items-center gap-2"
-                              >
-                                {prompt.status === 'active' ? <Pause size={16} /> : <Play size={16} />}
-                                {prompt.status === 'active' ? 'Archive' : 'Reactivate'}
-                              </button>
-                              <button
-                                onClick={() => {
-                                  deletePrompt(prompt.id)
-                                  setMenuOpen(null)
-                                }}
-                                className="w-full px-4 py-3 text-left text-sm text-accent-red hover:bg-quant-border/50 flex items-center gap-2"
-                              >
-                                <Trash2 size={16} />
-                                Delete
-                              </button>
-                            </motion.div>
-                          )}
-                        </AnimatePresence>
-                      </div>
-                    </div>
+                              initial={{ width: 0 }}
+                              animate={{ width: `${progress.percentage}%` }}
+                              className="h-full bg-gradient-to-r from-accent-cyan to-accent-green rounded-full"
+                            />
+                          </div>
+                        </div>
 
-                    {/* Meta info */}
-                    <div className="flex items-center gap-2 mt-1">
-                      <span className={`text-xs px-2 py-0.5 rounded-full ${
-                        prompt.mode === 'auto'
-                          ? 'bg-accent-cyan/20 text-accent-cyan'
-                          : 'bg-accent-orange/20 text-accent-orange'
-                      }`}>
-                        {prompt.mode === 'auto' ? 'AUTO' : 'MANUAL'}
-                      </span>
-                      <span className="text-xs text-gray-500 capitalize">{prompt.executionTime}</span>
-                    </div>
-
-                    {/* Stats Row */}
-                    <div className="grid grid-cols-4 gap-2 mt-3">
-                      <div className="bg-quant-surface/50 rounded-lg p-2 text-center">
-                        <span className="text-xs text-gray-500 block">Trades</span>
-                        <span className="text-sm font-mono text-white">{prompt.trades}</span>
-                      </div>
-                      <div className="bg-quant-surface/50 rounded-lg p-2 text-center">
-                        <span className="text-xs text-gray-500 block">Win</span>
-                        <span className={`text-sm font-mono ${
-                          prompt.winRate >= 50 ? 'text-accent-green' : 'text-accent-red'
-                        }`}>
-                          {prompt.winRate}%
-                        </span>
-                      </div>
-                      <div className="bg-quant-surface/50 rounded-lg p-2 text-center">
-                        <span className="text-xs text-gray-500 block">PF</span>
-                        <span className={`text-sm font-mono ${
-                          prompt.profitFactor >= 1 ? 'text-accent-green' : 'text-accent-red'
-                        }`}>
-                          {prompt.profitFactor.toFixed(1)}
-                        </span>
-                      </div>
-                      <div className="bg-quant-surface/50 rounded-lg p-2 text-center">
-                        <span className="text-xs text-gray-500 block">PnL</span>
-                        <span className={`text-sm font-mono ${
-                          prompt.totalPnl >= 0 ? 'text-accent-green' : 'text-accent-red'
-                        }`}>
-                          {prompt.totalPnl >= 0 ? '+' : ''}{prompt.totalPnl.toFixed(0)}
-                        </span>
+                        {/* Results (for hatched eggs) */}
+                        {egg.status === 'hatched' && egg.results && (
+                          <div className="grid grid-cols-4 gap-2 mt-3">
+                            <div className="bg-quant-surface/50 rounded-lg p-2 text-center">
+                              <span className="text-xs text-gray-500 block">Trades</span>
+                              <span className="text-sm font-mono text-white">{egg.results.totalTrades}</span>
+                            </div>
+                            <div className="bg-quant-surface/50 rounded-lg p-2 text-center">
+                              <span className="text-xs text-gray-500 block">Win</span>
+                              <span className={`text-sm font-mono ${
+                                egg.results.winRate >= 50 ? 'text-accent-green' : 'text-accent-red'
+                              }`}>
+                                {egg.results.winRate}%
+                              </span>
+                            </div>
+                            <div className="bg-quant-surface/50 rounded-lg p-2 text-center">
+                              <span className="text-xs text-gray-500 block">PF</span>
+                              <span className={`text-sm font-mono ${
+                                egg.results.profitFactor >= 1 ? 'text-accent-green' : 'text-accent-red'
+                              }`}>
+                                {egg.results.profitFactor === Infinity ? '∞' : egg.results.profitFactor.toFixed(1)}
+                              </span>
+                            </div>
+                            <div className="bg-quant-surface/50 rounded-lg p-2 text-center">
+                              <span className="text-xs text-gray-500 block">PnL</span>
+                              <span className={`text-sm font-mono ${
+                                egg.results.totalPnl >= 0 ? 'text-accent-green' : 'text-accent-red'
+                              }`}>
+                                {egg.results.totalPnl >= 0 ? '+' : ''}{egg.results.totalPnl.toFixed(0)}
+                              </span>
+                            </div>
+                          </div>
+                        )}
                       </div>
                     </div>
                   </div>
-                </div>
-              </motion.div>
-            ))
+
+                  {/* Expanded Trades List */}
+                  <AnimatePresence>
+                    {isExpanded && (
+                      <motion.div
+                        initial={{ height: 0, opacity: 0 }}
+                        animate={{ height: 'auto', opacity: 1 }}
+                        exit={{ height: 0, opacity: 0 }}
+                        className="border-t border-quant-border"
+                      >
+                        <div className="p-3 space-y-2 bg-quant-surface/30">
+                          <span className="text-xs text-gray-500 uppercase tracking-wider">Trades in this egg</span>
+                          {eggSignals.map((signal) => {
+                            const isLong = signal.strategy === 'LONG'
+                            const isClosed = signal.status === 'closed'
+
+                            return (
+                              <div
+                                key={signal.id}
+                                className={`bg-quant-card rounded-xl p-3 border ${
+                                  isClosed
+                                    ? signal.result === 'win'
+                                      ? 'border-accent-green/30'
+                                      : 'border-accent-red/30'
+                                    : 'border-quant-border'
+                                }`}
+                              >
+                                <div className="flex items-center justify-between">
+                                  <div className="flex items-center gap-2">
+                                    <div className={`p-1.5 rounded-lg ${
+                                      isLong ? 'bg-accent-green/20' : 'bg-accent-red/20'
+                                    }`}>
+                                      {isLong ? (
+                                        <TrendingUp size={14} className="text-accent-green" />
+                                      ) : (
+                                        <TrendingDown size={14} className="text-accent-red" />
+                                      )}
+                                    </div>
+                                    <div>
+                                      <span className="text-sm font-medium text-white">{signal.asset}</span>
+                                      <span className={`ml-2 text-xs ${
+                                        isLong ? 'text-accent-green' : 'text-accent-red'
+                                      }`}>
+                                        {signal.strategy}
+                                      </span>
+                                    </div>
+                                  </div>
+
+                                  <div className="text-right">
+                                    {isClosed ? (
+                                      <span className={`text-sm font-mono font-bold ${
+                                        signal.result === 'win' ? 'text-accent-green' : 'text-accent-red'
+                                      }`}>
+                                        {signal.pnl >= 0 ? '+' : ''}{signal.pnl?.toFixed(2) || '0.00'}
+                                      </span>
+                                    ) : (
+                                      <span className="text-xs text-accent-cyan flex items-center gap-1">
+                                        <span className="w-1.5 h-1.5 bg-accent-cyan rounded-full animate-pulse" />
+                                        Active
+                                      </span>
+                                    )}
+                                  </div>
+                                </div>
+
+                                <div className="flex items-center justify-between mt-2 text-xs">
+                                  <span className="text-gray-500">
+                                    Entry: <span className="text-white font-mono">${signal.entry}</span>
+                                  </span>
+                                  <span className="text-accent-green">
+                                    TP: ${signal.takeProfit}
+                                  </span>
+                                  <span className="text-accent-red">
+                                    SL: ${signal.stopLoss}
+                                  </span>
+                                  <span className={`font-bold ${
+                                    signal.ipe >= 80 ? 'text-accent-green' : 'text-accent-yellow'
+                                  }`}>
+                                    {signal.ipe}%
+                                  </span>
+                                </div>
+                              </div>
+                            )
+                          })}
+                        </div>
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
+                </motion.div>
+              )
+            })
           )}
         </AnimatePresence>
       </div>
-
-      {/* Close menu on outside click */}
-      {menuOpen && (
-        <div
-          className="fixed inset-0 z-10"
-          onClick={() => setMenuOpen(null)}
-        />
-      )}
     </motion.div>
   )
 }
