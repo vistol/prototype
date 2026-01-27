@@ -307,6 +307,88 @@ export const loadSettings = async (client) => {
   }
 }
 
+// Sync eggs to Supabase
+export const syncEggs = async (client, eggs) => {
+  if (!client || !eggs.length) return { success: true }
+
+  try {
+    const formattedEggs = eggs.map(e => ({
+      id: e.id,
+      prompt_id: e.promptId,
+      prompt_name: e.promptName,
+      status: e.status,
+      trades: e.trades,
+      total_capital: e.totalCapital,
+      execution_time: e.executionTime,
+      expires_at: e.expiresAt,
+      hatched_at: e.hatchedAt,
+      results: e.results,
+      created_at: e.createdAt
+    }))
+
+    const { error } = await client
+      .from('eggs')
+      .upsert(formattedEggs, { onConflict: 'id' })
+
+    if (error) throw error
+    return { success: true }
+  } catch (err) {
+    console.error('Sync eggs error:', err)
+    return { success: false, error: err.message }
+  }
+}
+
+// Load eggs from Supabase
+export const loadEggs = async (client) => {
+  if (!client) return { success: false, data: [] }
+
+  try {
+    const { data, error } = await client
+      .from('eggs')
+      .select('*')
+      .order('created_at', { ascending: false })
+
+    if (error) throw error
+
+    const formattedEggs = (data || []).map(e => ({
+      id: e.id,
+      promptId: e.prompt_id,
+      promptName: e.prompt_name,
+      status: e.status,
+      trades: e.trades || [],
+      totalCapital: e.total_capital,
+      executionTime: e.execution_time,
+      expiresAt: e.expires_at,
+      hatchedAt: e.hatched_at,
+      results: e.results,
+      createdAt: e.created_at
+    }))
+
+    return { success: true, data: formattedEggs }
+  } catch (err) {
+    console.error('Load eggs error:', err)
+    return { success: false, data: [], error: err.message }
+  }
+}
+
+// Delete egg from Supabase
+export const deleteEggFromCloud = async (client, eggId) => {
+  if (!client) return { success: true }
+
+  try {
+    const { error } = await client
+      .from('eggs')
+      .delete()
+      .eq('id', eggId)
+
+    if (error) throw error
+    return { success: true }
+  } catch (err) {
+    console.error('Delete egg error:', err)
+    return { success: false, error: err.message }
+  }
+}
+
 // Delete prompt from Supabase
 export const deletePromptFromCloud = async (client, promptId) => {
   if (!client) return { success: true }

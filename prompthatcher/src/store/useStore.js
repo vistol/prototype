@@ -4,11 +4,14 @@ import {
   getSupabaseClient,
   syncPrompts,
   syncSignals,
+  syncEggs,
   syncSettings,
   loadPrompts,
   loadSignals,
+  loadEggs,
   loadSettings,
-  deletePromptFromCloud
+  deletePromptFromCloud,
+  deleteEggFromCloud
 } from '../lib/supabase'
 import { generateTradesFromPrompt } from '../lib/aiService'
 import {
@@ -736,6 +739,43 @@ If no truly new strategy can be generated, you must invent a new angle rather th
         return null
       },
 
+      // Cloud initialization state
+      isCloudInitialized: false,
+      isInitializing: false,
+
+      // Initialize app data from cloud (called on app start)
+      initializeFromCloud: async () => {
+        const state = get()
+        const client = state.getClient()
+
+        if (!client) {
+          // No Supabase configured, use empty state
+          set({ isCloudInitialized: true })
+          return { success: false, error: 'Supabase not configured' }
+        }
+
+        if (state.isInitializing) {
+          return { success: false, error: 'Already initializing' }
+        }
+
+        set({ isInitializing: true })
+
+        try {
+          const result = await get().loadFromCloud()
+          set({
+            isCloudInitialized: true,
+            isInitializing: false
+          })
+          return result
+        } catch (err) {
+          set({
+            isCloudInitialized: true,
+            isInitializing: false
+          })
+          return { success: false, error: err.message }
+        }
+      },
+
       // Sync all data to cloud
       syncToCloud: async () => {
         const state = get()
@@ -749,14 +789,15 @@ If no truly new strategy can be generated, you must invent a new angle rather th
 
         try {
           // Sync all data in parallel
-          const [promptsResult, signalsResult, settingsResult] = await Promise.all([
+          const [promptsResult, signalsResult, eggsResult, settingsResult] = await Promise.all([
             syncPrompts(client, state.prompts),
             syncSignals(client, state.signals),
+            syncEggs(client, state.eggs),
             syncSettings(client, state.settings)
           ])
 
-          const hasError = !promptsResult.success || !signalsResult.success || !settingsResult.success
-          const errorMsg = promptsResult.error || signalsResult.error || settingsResult.error
+          const hasError = !promptsResult.success || !signalsResult.success || !eggsResult.success || !settingsResult.success
+          const errorMsg = promptsResult.error || signalsResult.error || eggsResult.error || settingsResult.error
 
           set({
             syncStatus: {
@@ -803,19 +844,24 @@ If no truly new strategy can be generated, you must invent a new angle rather th
         set({ syncStatus: { ...state.syncStatus, loading: true, error: null } })
 
         try {
-          const [promptsResult, signalsResult, settingsResult] = await Promise.all([
+          const [promptsResult, signalsResult, eggsResult, settingsResult] = await Promise.all([
             loadPrompts(client),
             loadSignals(client),
+            loadEggs(client),
             loadSettings(client)
           ])
 
-          // Merge cloud data with local (cloud takes precedence if newer)
-          if (promptsResult.success && promptsResult.data.length > 0) {
+          // Cloud data replaces local data completely
+          if (promptsResult.success) {
             set({ prompts: promptsResult.data })
           }
 
-          if (signalsResult.success && signalsResult.data.length > 0) {
+          if (signalsResult.success) {
             set({ signals: signalsResult.data })
+          }
+
+          if (eggsResult.success) {
+            set({ eggs: eggsResult.data })
           }
 
           if (settingsResult.success && settingsResult.data) {
@@ -868,12 +914,13 @@ If no truly new strategy can be generated, you must invent a new angle rather th
     }),
     {
       name: 'prompthatcher-storage',
+      // Only persist Supabase credentials locally - all data lives in the cloud
       partialize: (state) => ({
-        prompts: state.prompts,
-        signals: state.signals,
-        eggs: state.eggs,
-        settings: state.settings,
-        onboardingCompleted: state.onboardingCompleted
+        onboardingCompleted: state.onboardingCompleted,
+        settings: {
+          supabase: state.settings.supabase,
+          tradingPlatform: state.settings.tradingPlatform
+        }
       })
     }
   )
