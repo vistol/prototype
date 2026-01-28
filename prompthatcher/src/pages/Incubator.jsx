@@ -55,6 +55,31 @@ export default function Incubator() {
   // Check if egg is expired
   const isEggExpired = (egg) => egg.expiresAt && new Date(egg.expiresAt) <= new Date()
 
+  // Get current price
+  const getPrice = (asset) => prices[asset]?.price || null
+
+  // Calculate unrealized PnL for a signal
+  const getPnlForSort = (signal) => {
+    const price = getPrice(signal.asset)
+    if (!price || signal.status === 'closed') return signal.pnl || 0
+    const entry = parseFloat(signal.entry)
+    return signal.strategy === 'LONG'
+      ? ((price - entry) / entry) * 100
+      : ((entry - price) / entry) * 100
+  }
+
+  // Calculate egg PnL for sorting (same as header display)
+  const getEggPnlForSort = (egg) => {
+    const eggSignals = signals.filter(s => egg.trades.includes(s.id))
+    if (eggSignals.length === 0) return 0
+
+    let totalPnl = 0
+    eggSignals.forEach(signal => {
+      totalPnl += getPnlForSort(signal)
+    })
+    return totalPnl / eggSignals.length
+  }
+
   // Get egg results for filtering/sorting
   const getEggResults = (egg) => {
     const eggSignals = signals.filter(s => egg.trades.includes(s.id))
@@ -111,11 +136,15 @@ export default function Incubator() {
         }
       }
     })
-    .map(e => ({ ...e, _results: getEggResults(e) }))
+    .map(e => ({
+      ...e,
+      _results: getEggResults(e),
+      _pnl: getEggPnlForSort(e) // Real-time PnL for sorting
+    }))
     .sort((a, b) => {
       switch (sortBy) {
         case 'pnl':
-          return b._results.totalPnl - a._results.totalPnl
+          return b._pnl - a._pnl // Use real-time PnL
         case 'winRate':
           return b._results.winRate - a._results.winRate
         case 'trades':
