@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Archive, Clock, TrendingUp, TrendingDown, ChevronDown, ChevronUp, Activity, DollarSign, Zap, Cpu, Target, Hash, Radio } from 'lucide-react'
+import { Archive, Clock, TrendingUp, TrendingDown, ChevronDown, ChevronUp, Activity, DollarSign, Zap, Cpu, Target, Hash, Radio, Filter, ArrowUpDown } from 'lucide-react'
 import useStore from '../store/useStore'
 import Header from '../components/Header'
 import EggIcon from '../components/EggIcon'
@@ -27,6 +27,25 @@ export default function Incubator() {
   const [expandedEgg, setExpandedEgg] = useState(null)
   const [expandedConfig, setExpandedConfig] = useState({}) // Track expanded config per egg
   const [showConsole, setShowConsole] = useState(false)
+  const [sortBy, setSortBy] = useState('recent') // 'recent', 'pnl', 'winRate', 'trades'
+  const [filterBy, setFilterBy] = useState('all') // 'all', 'profitable', 'unprofitable', 'hatched', 'expired'
+
+  // Sort options
+  const sortOptions = [
+    { id: 'recent', label: 'Reciente' },
+    { id: 'pnl', label: 'PnL' },
+    { id: 'winRate', label: 'Win Rate' },
+    { id: 'trades', label: 'Trades' }
+  ]
+
+  // Filter options (for completed tab)
+  const filterOptions = [
+    { id: 'all', label: 'Todos' },
+    { id: 'profitable', label: 'Ganadores' },
+    { id: 'unprofitable', label: 'Perdedores' },
+    { id: 'hatched', label: 'Completados' },
+    { id: 'expired', label: 'Expirados' }
+  ]
 
   // Toggle config expansion for an egg
   const toggleConfigExpand = (eggId) => {
@@ -36,16 +55,76 @@ export default function Incubator() {
   // Check if egg is expired
   const isEggExpired = (egg) => egg.expiresAt && new Date(egg.expiresAt) <= new Date()
 
-  // Filter eggs: Live (active & not expired) vs Completed (hatched or expired)
-  const filteredEggs = eggs.filter(e => {
-    const expired = isEggExpired(e)
-    if (activeFilter === 'live') {
-      return e.status === 'incubating' && !expired
-    } else {
-      // Completed tab shows: naturally hatched OR expired eggs
-      return e.status === 'hatched' || (e.status === 'incubating' && expired)
+  // Get egg results for filtering/sorting
+  const getEggResults = (egg) => {
+    const eggSignals = signals.filter(s => egg.trades.includes(s.id))
+    const closedSignals = eggSignals.filter(s => s.status === 'closed')
+    const expired = isEggExpired(egg)
+    const signalsForPnl = expired ? eggSignals : closedSignals
+
+    if (signalsForPnl.length === 0) {
+      return { totalPnl: 0, winRate: 0, totalTrades: eggSignals.length }
     }
-  })
+
+    const pnlValues = signalsForPnl.map(s => {
+      if (s.status === 'closed' && s.pnl !== undefined) return s.pnl
+      const currentPrice = prices[s.asset]?.price
+      if (!currentPrice) return 0
+      const entry = parseFloat(s.entry)
+      return s.strategy === 'LONG'
+        ? ((currentPrice - entry) / entry) * 100
+        : ((entry - currentPrice) / entry) * 100
+    })
+
+    const wins = pnlValues.filter(p => p > 0).length
+    return {
+      totalPnl: pnlValues.reduce((sum, p) => sum + p, 0) / pnlValues.length,
+      winRate: Math.round((wins / signalsForPnl.length) * 100),
+      totalTrades: eggSignals.length
+    }
+  }
+
+  // Filter eggs: Live (active & not expired) vs Completed (hatched or expired)
+  const filteredEggs = eggs
+    .filter(e => {
+      const expired = isEggExpired(e)
+      if (activeFilter === 'live') {
+        return e.status === 'incubating' && !expired
+      } else {
+        // Completed tab shows: naturally hatched OR expired eggs
+        const isCompleted = e.status === 'hatched' || (e.status === 'incubating' && expired)
+        if (!isCompleted) return false
+
+        // Apply sub-filter for completed tab
+        const results = getEggResults(e)
+        switch (filterBy) {
+          case 'profitable':
+            return results.totalPnl >= 0
+          case 'unprofitable':
+            return results.totalPnl < 0
+          case 'hatched':
+            return e.status === 'hatched'
+          case 'expired':
+            return e.status === 'incubating' && expired
+          default:
+            return true
+        }
+      }
+    })
+    .map(e => ({ ...e, _results: getEggResults(e) }))
+    .sort((a, b) => {
+      switch (sortBy) {
+        case 'pnl':
+          return b._results.totalPnl - a._results.totalPnl
+        case 'winRate':
+          return b._results.winRate - a._results.winRate
+        case 'trades':
+          return b._results.totalTrades - a._results.totalTrades
+        case 'recent':
+        default:
+          return new Date(b.createdAt) - new Date(a.createdAt)
+      }
+    })
 
   // Get egg status info
   const getEggStatus = (egg) => {
@@ -242,6 +321,47 @@ export default function Incubator() {
           </motion.div>
         )}
       </AnimatePresence>
+
+      {/* Filter & Sort Options */}
+      <div className="px-4 pb-3 space-y-2">
+        {/* Filter (only for completed tab) */}
+        {activeFilter === 'completed' && (
+          <div className="flex items-center gap-2 overflow-x-auto hide-scrollbar">
+            <Filter size={14} className="text-gray-500 shrink-0" />
+            {filterOptions.map((option) => (
+              <button
+                key={option.id}
+                onClick={() => setFilterBy(option.id)}
+                className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all shrink-0 ${
+                  filterBy === option.id
+                    ? 'bg-accent-cyan/20 text-accent-cyan'
+                    : 'bg-quant-surface text-gray-400'
+                }`}
+              >
+                {option.label}
+              </button>
+            ))}
+          </div>
+        )}
+
+        {/* Sort */}
+        <div className="flex items-center gap-2 overflow-x-auto hide-scrollbar">
+          <ArrowUpDown size={14} className="text-gray-500 shrink-0" />
+          {sortOptions.map((option) => (
+            <button
+              key={option.id}
+              onClick={() => setSortBy(option.id)}
+              className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all shrink-0 ${
+                sortBy === option.id
+                  ? 'bg-accent-purple/20 text-accent-purple'
+                  : 'bg-quant-surface text-gray-400'
+              }`}
+            >
+              {option.label}
+            </button>
+          ))}
+        </div>
+      </div>
 
       {/* Eggs List */}
       <div className="px-4 space-y-3">
