@@ -396,7 +396,7 @@ export default function Incubator() {
                           {/* Configuration Section - Option C: Minimalist Dashboard */}
                           {(() => {
                             // Create fallback config for old eggs without config
-                            const config = egg.config || {
+                            const baseConfig = egg.config || {
                               capital: egg.totalCapital || 1000,
                               leverage: 5,
                               executionTime: egg.executionTime || 'target',
@@ -405,6 +405,18 @@ export default function Incubator() {
                               numResults: eggSignals.length,
                               targetPct: null
                             }
+
+                            // Calculate target % from trade data if not stored
+                            let effectiveTargetPct = baseConfig.targetPct
+                            if (!effectiveTargetPct && eggSignals.length > 0) {
+                              // Derive from first signal's reward percentage × leverage
+                              const firstSignal = eggSignals[0]
+                              const rewardPct = parseFloat(firstSignal.rewardPercent) || 0
+                              const lev = firstSignal.leverage || baseConfig.leverage || 5
+                              effectiveTargetPct = Math.round(rewardPct * lev)
+                            }
+
+                            const config = { ...baseConfig, targetPct: effectiveTargetPct }
                             return (
                             <div className="bg-quant-card rounded-xl p-4 border border-quant-border">
                               {/* Investment Flow */}
