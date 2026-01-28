@@ -207,7 +207,7 @@ export const generateTradesFromPrompt = async (prompt, settings, numResults = 3)
       explanation: explanations[Math.floor(Math.random() * explanations.length)],
       insights: shuffledInsights.slice(0, 3),
       executionTime: prompt.executionTime,
-      leverage: prompt.leverage,
+      leverage: prompt.leverage || 5, // Store leverage with default fallback
       capital: prompt.capital / numResults, // Divide capital among trades
       createdAt: new Date().toISOString(),
       status: 'pending', // pending -> active -> closed
@@ -285,7 +285,7 @@ export const generateTradesFromPrompt = async (prompt, settings, numResults = 3)
       explanation: `AI-generated opportunity for ${extraAsset} based on market analysis.`,
       insights: ['Favorable market conditions', 'Technical setup confirmed', `R:R ratio ${extraRrRatio.toFixed(1)}:1`],
       executionTime: prompt.executionTime,
-      leverage: prompt.leverage,
+      leverage: prompt.leverage || 5, // Store leverage with default fallback
       capital: prompt.capital / numResults,
       createdAt: new Date().toISOString(),
       status: 'pending',

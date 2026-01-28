@@ -394,17 +394,28 @@ export default function Incubator() {
                       >
                         <div className="p-3 space-y-4 bg-quant-surface/20">
                           {/* Configuration Section - Option C: Minimalist Dashboard */}
-                          {egg.config && (
+                          {(() => {
+                            // Create fallback config for old eggs without config
+                            const config = egg.config || {
+                              capital: egg.totalCapital || 1000,
+                              leverage: 5,
+                              executionTime: egg.executionTime || 'target',
+                              aiModel: 'gemini',
+                              minIpe: 80,
+                              numResults: eggSignals.length,
+                              targetPct: null
+                            }
+                            return (
                             <div className="bg-quant-card rounded-xl p-4 border border-quant-border">
                               {/* Investment Flow */}
                               <div className="flex items-center justify-between mb-3">
                                 {/* Left: Investment */}
                                 <div className="text-center">
                                   <div className="text-lg font-bold text-white font-mono">
-                                    ${egg.config.capital}
+                                    ${config.capital}
                                   </div>
                                   <div className="text-[10px] text-gray-500">
-                                    con {egg.config.leverage}x
+                                    con {config.leverage}x
                                   </div>
                                   <div className="text-[10px] text-gray-400 mt-0.5">
                                     tu inversión
@@ -417,7 +428,7 @@ export default function Incubator() {
                                     <div className="h-px w-6 bg-gradient-to-r from-transparent to-accent-cyan"></div>
                                     <div className="px-3 py-1 rounded-full bg-accent-cyan/10 border border-accent-cyan/30">
                                       <span className="text-accent-cyan font-bold text-sm">
-                                        {egg.config.targetPct ? `+${egg.config.targetPct}%` : '—'}
+                                        {config.targetPct ? `+${config.targetPct}%` : '—'}
                                       </span>
                                     </div>
                                     <div className="h-px w-6 bg-gradient-to-r from-accent-cyan to-accent-green"></div>
@@ -428,8 +439,8 @@ export default function Incubator() {
                                 {/* Right: Potential Gain */}
                                 <div className="text-center">
                                   <div className="text-lg font-bold text-accent-green font-mono">
-                                    {egg.config.targetPct
-                                      ? `+$${((egg.config.capital * egg.config.targetPct) / 100).toFixed(0)}`
+                                    {config.targetPct
+                                      ? `+$${((config.capital * config.targetPct) / 100).toFixed(0)}`
                                       : '—'
                                     }
                                   </div>
@@ -443,12 +454,12 @@ export default function Incubator() {
                               </div>
 
                               {/* Explanation Box */}
-                              {egg.config.targetPct && (
+                              {config.targetPct && (
                                 <div className="mb-3 px-3 py-2 rounded-lg bg-quant-surface border border-quant-border">
                                   <div className="flex items-center gap-2 text-xs text-gray-300">
                                     <Activity size={12} className="text-accent-cyan shrink-0" />
                                     <span>
-                                      Precio debe moverse <span className="text-accent-cyan font-mono font-medium">{(egg.config.targetPct / egg.config.leverage).toFixed(1)}%</span> para ganar <span className="text-accent-green font-medium">+{egg.config.targetPct}%</span>
+                                      Precio debe moverse <span className="text-accent-cyan font-mono font-medium">{(config.targetPct / config.leverage).toFixed(1)}%</span> para ganar <span className="text-accent-green font-medium">+{config.targetPct}%</span>
                                     </span>
                                   </div>
                                 </div>
@@ -458,23 +469,23 @@ export default function Incubator() {
                               <div className="flex items-center justify-between gap-2 text-[10px]">
                                 <div className="flex items-center gap-1 px-2 py-1 rounded-md bg-quant-surface text-gray-400">
                                   <Clock size={10} className="text-accent-purple" />
-                                  <span>{EXECUTION_LABELS[egg.config.executionTime] || egg.config.executionTime}</span>
+                                  <span>{EXECUTION_LABELS[config.executionTime] || config.executionTime}</span>
                                 </div>
                                 <div className="flex items-center gap-1 px-2 py-1 rounded-md bg-quant-surface text-gray-400">
-                                  <span>{AI_MODEL_LABELS[egg.config.aiModel]?.icon}</span>
-                                  <span>{AI_MODEL_LABELS[egg.config.aiModel]?.name || egg.config.aiModel}</span>
+                                  <span>{AI_MODEL_LABELS[config.aiModel]?.icon}</span>
+                                  <span>{AI_MODEL_LABELS[config.aiModel]?.name || config.aiModel}</span>
                                 </div>
                                 <div className="flex items-center gap-1 px-2 py-1 rounded-md bg-quant-surface text-gray-400">
                                   <Target size={10} className="text-accent-orange" />
-                                  <span>IPE {egg.config.minIpe}%</span>
+                                  <span>IPE {config.minIpe}%</span>
                                 </div>
                                 <div className="flex items-center gap-1 px-2 py-1 rounded-md bg-quant-surface text-gray-400">
                                   <Hash size={10} />
-                                  <span>{egg.config.numResults}</span>
+                                  <span>{config.numResults}</span>
                                 </div>
                               </div>
                             </div>
-                          )}
+                          )})()}
 
                           {/* Trades Section */}
                           <div>
@@ -556,8 +567,8 @@ export default function Incubator() {
                                     const entry = parseFloat(signal.entry)
                                     const tp = parseFloat(signal.takeProfit)
                                     const sl = parseFloat(signal.stopLoss)
-                                    // Use signal values or fall back to egg config
-                                    const lev = signal.leverage || egg.config?.leverage || 1
+                                    // Use signal values or fall back to egg config (default 5x leverage)
+                                    const lev = signal.leverage || egg.config?.leverage || 5
                                     const totalCap = egg.config?.capital || signal.capital || 1000
                                     const numTrades = eggSignals.length || 1
                                     const cap = signal.capital || (totalCap / numTrades)
