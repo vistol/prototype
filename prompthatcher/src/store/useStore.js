@@ -451,6 +451,119 @@ const useStore = create(
         // Force page reload for clean state
         window.location.reload()
       },
+
+      // Selective data reset with dependency handling
+      resetSelectiveData: (options = {}) => {
+        const {
+          deletePrompts = false,
+          deleteEggs = false,
+          deleteSignals = false,
+          deleteLogs = false,
+          resetOnboarding = false,
+          keepLinkedData = true // If true, keeps signals linked to eggs when deleting only prompts
+        } = options
+
+        const state = get()
+        let newPrompts = state.prompts
+        let newEggs = state.eggs
+        let newSignals = state.signals
+        let newLogs = state.activityLogs
+        let newOnboarding = state.onboardingCompleted
+
+        // Delete signals first (no dependencies on it)
+        if (deleteSignals) {
+          newSignals = []
+          // If deleting signals, eggs lose their trade references
+          newEggs = newEggs.map(egg => ({
+            ...egg,
+            trades: [],
+            status: egg.status === 'incubating' ? 'orphaned' : egg.status
+          }))
+        }
+
+        // Delete eggs
+        if (deleteEggs) {
+          // Get all signal IDs that belong to eggs
+          const eggSignalIds = newEggs.flatMap(egg => egg.trades)
+
+          if (!keepLinkedData) {
+            // Also delete signals that belonged to these eggs
+            newSignals = newSignals.filter(s => !eggSignalIds.includes(s.id))
+          }
+          newEggs = []
+        }
+
+        // Delete prompts
+        if (deletePrompts) {
+          if (!keepLinkedData) {
+            // Delete eggs that belonged to these prompts
+            const promptIds = newPrompts.map(p => p.id)
+            const eggsToDelete = newEggs.filter(e => promptIds.includes(e.promptId))
+            const eggSignalIds = eggsToDelete.flatMap(egg => egg.trades)
+
+            // Delete signals from those eggs
+            newSignals = newSignals.filter(s => !eggSignalIds.includes(s.id))
+            // Delete the eggs
+            newEggs = newEggs.filter(e => !promptIds.includes(e.promptId))
+          } else {
+            // Mark eggs as orphaned (prompt deleted)
+            newEggs = newEggs.map(egg => ({
+              ...egg,
+              promptName: egg.promptName + ' (deleted)',
+              promptId: null
+            }))
+          }
+          newPrompts = []
+        }
+
+        // Delete activity logs
+        if (deleteLogs) {
+          newLogs = []
+        }
+
+        // Reset onboarding
+        if (resetOnboarding) {
+          newOnboarding = false
+        }
+
+        set({
+          prompts: newPrompts,
+          eggs: newEggs,
+          signals: newSignals,
+          activityLogs: newLogs,
+          onboardingCompleted: newOnboarding
+        })
+
+        // Trigger sync if connected
+        get().triggerSync()
+
+        return {
+          deletedPrompts: deletePrompts ? state.prompts.length : 0,
+          deletedEggs: deleteEggs ? state.eggs.length : 0,
+          deletedSignals: deleteSignals ? state.signals.length : 0,
+          deletedLogs: deleteLogs ? state.activityLogs.length : 0
+        }
+      },
+
+      // Get data counts for UI
+      getDataCounts: () => {
+        const state = get()
+        const incubatingEggs = state.eggs.filter(e => e.status === 'incubating')
+        const hatchedEggs = state.eggs.filter(e => e.status === 'hatched')
+        const activeSignals = state.signals.filter(s => s.status === 'active')
+        const closedSignals = state.signals.filter(s => s.status === 'closed')
+
+        return {
+          prompts: state.prompts.length,
+          eggs: state.eggs.length,
+          incubatingEggs: incubatingEggs.length,
+          hatchedEggs: hatchedEggs.length,
+          signals: state.signals.length,
+          activeSignals: activeSignals.length,
+          closedSignals: closedSignals.length,
+          activityLogs: state.activityLogs.length
+        }
+      },
       isConfigured: () => {
         const state = get()
         const hasAiKey = Object.values(state.settings.apiKeys).some(key => key && key.length > 0)

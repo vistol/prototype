@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Cpu, FileText, Database, ChevronRight, Eye, EyeOff, Check, X, AlertCircle, Edit3, Plus, Crown, ChevronDown, ChevronUp, Cloud, RefreshCw, Download, Upload, Activity, TrendingUp, Trash2 } from 'lucide-react'
+import { Cpu, FileText, Database, ChevronRight, Eye, EyeOff, Check, X, AlertCircle, Edit3, Plus, Crown, ChevronDown, ChevronUp, Cloud, RefreshCw, Download, Upload, Activity, TrendingUp, Trash2, Link, Unlink, Info, Egg, BarChart3, ScrollText } from 'lucide-react'
 import useStore from '../store/useStore'
 import Header from '../components/Header'
 
@@ -64,7 +64,11 @@ export default function Settings() {
     syncStatus,
     priceStatus,
     refreshPrices,
-    resetAllData
+    resetAllData,
+    resetSelectiveData,
+    getDataCounts,
+    eggs,
+    signals
   } = useStore()
 
   const [activeTab, setActiveTab] = useState(0)
@@ -77,6 +81,96 @@ export default function Settings() {
   const [systemPromptContent, setSystemPromptContent] = useState(settings.systemPrompt || '')
   const [systemPromptExpanded, setSystemPromptExpanded] = useState(false)
   const [showResetConfirm, setShowResetConfirm] = useState(false)
+
+  // Selective delete state
+  const [deleteOptions, setDeleteOptions] = useState({
+    deletePrompts: false,
+    deleteEggs: false,
+    deleteSignals: false,
+    deleteLogs: false,
+    resetOnboarding: false,
+    keepLinkedData: true
+  })
+  const [deleteResult, setDeleteResult] = useState(null)
+
+  // Get current data counts
+  const dataCounts = getDataCounts()
+
+  // Calculate what will be affected by deletion
+  const getDeleteImpact = () => {
+    const impact = []
+    const warnings = []
+
+    if (deleteOptions.deletePrompts) {
+      impact.push(`${prompts.length} prompts`)
+      if (!deleteOptions.keepLinkedData && eggs.length > 0) {
+        const linkedEggs = eggs.filter(e => prompts.some(p => p.id === e.promptId))
+        if (linkedEggs.length > 0) {
+          warnings.push(`${linkedEggs.length} eggs will also be deleted (linked to prompts)`)
+          const linkedSignals = signals.filter(s => linkedEggs.some(e => e.trades.includes(s.id)))
+          if (linkedSignals.length > 0) {
+            warnings.push(`${linkedSignals.length} signals will also be deleted (linked to those eggs)`)
+          }
+        }
+      } else if (deleteOptions.keepLinkedData && eggs.length > 0) {
+        const linkedEggs = eggs.filter(e => prompts.some(p => p.id === e.promptId))
+        if (linkedEggs.length > 0) {
+          warnings.push(`${linkedEggs.length} eggs will become orphaned (marked as "deleted" prompt)`)
+        }
+      }
+    }
+
+    if (deleteOptions.deleteEggs) {
+      impact.push(`${eggs.length} eggs`)
+      if (!deleteOptions.keepLinkedData) {
+        const eggSignalIds = eggs.flatMap(e => e.trades)
+        const linkedSignals = signals.filter(s => eggSignalIds.includes(s.id))
+        if (linkedSignals.length > 0) {
+          warnings.push(`${linkedSignals.length} signals will also be deleted (linked to eggs)`)
+        }
+      }
+    }
+
+    if (deleteOptions.deleteSignals) {
+      impact.push(`${signals.length} signals/trades`)
+      const eggsWithSignals = eggs.filter(e => e.trades.length > 0)
+      if (eggsWithSignals.length > 0) {
+        warnings.push(`${eggsWithSignals.length} eggs will lose their trade references`)
+      }
+    }
+
+    if (deleteOptions.deleteLogs) {
+      impact.push(`${dataCounts.activityLogs} activity logs`)
+    }
+
+    if (deleteOptions.resetOnboarding) {
+      impact.push('onboarding status (will show setup wizard again)')
+    }
+
+    return { impact, warnings }
+  }
+
+  const handleSelectiveDelete = () => {
+    const result = resetSelectiveData(deleteOptions)
+    setDeleteResult(result)
+    setShowResetConfirm(false)
+
+    // Reset options after delete
+    setTimeout(() => {
+      setDeleteOptions({
+        deletePrompts: false,
+        deleteEggs: false,
+        deleteSignals: false,
+        deleteLogs: false,
+        resetOnboarding: false,
+        keepLinkedData: true
+      })
+      setDeleteResult(null)
+    }, 3000)
+  }
+
+  const anyDeleteSelected = deleteOptions.deletePrompts || deleteOptions.deleteEggs ||
+    deleteOptions.deleteSignals || deleteOptions.deleteLogs || deleteOptions.resetOnboarding
 
   const handleSaveSystemPrompt = () => {
     updateSystemPrompt(systemPromptContent)
@@ -698,23 +792,296 @@ export default function Settings() {
 
               {/* Danger Zone */}
               <div className="bg-quant-card border border-accent-red/30 rounded-xl p-4">
-                <h3 className="font-semibold text-accent-red mb-3 flex items-center gap-2">
+                <h3 className="font-semibold text-accent-red mb-4 flex items-center gap-2">
                   <AlertCircle size={16} />
                   Danger Zone
                 </h3>
-                <p className="text-sm text-gray-400 mb-4">
-                  Reset all local data and start fresh. This will clear all prompts, eggs, and signals.
-                </p>
-                <button
-                  onClick={() => setShowResetConfirm(true)}
-                  className="w-full py-3 rounded-xl font-medium bg-accent-red/20 text-accent-red hover:bg-accent-red/30 transition-all flex items-center justify-center gap-2"
-                >
-                  <Trash2 size={16} />
-                  Reset All Data
-                </button>
+
+                {/* Current Data Summary */}
+                <div className="bg-quant-surface rounded-xl p-3 mb-4">
+                  <span className="text-xs text-gray-500 uppercase tracking-wider block mb-2">Current Data</span>
+                  <div className="grid grid-cols-2 gap-2 text-sm">
+                    <div className="flex items-center gap-2">
+                      <FileText size={14} className="text-accent-cyan" />
+                      <span className="text-gray-400">Prompts:</span>
+                      <span className="text-white font-mono">{dataCounts.prompts}</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Egg size={14} className="text-accent-yellow" />
+                      <span className="text-gray-400">Eggs:</span>
+                      <span className="text-white font-mono">{dataCounts.eggs}</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <BarChart3 size={14} className="text-accent-green" />
+                      <span className="text-gray-400">Signals:</span>
+                      <span className="text-white font-mono">{dataCounts.signals}</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <ScrollText size={14} className="text-accent-purple" />
+                      <span className="text-gray-400">Logs:</span>
+                      <span className="text-white font-mono">{dataCounts.activityLogs}</span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Select Data to Delete */}
+                <div className="space-y-3 mb-4">
+                  <span className="text-xs text-gray-500 uppercase tracking-wider block">Select Data to Delete</span>
+
+                  {/* Prompts */}
+                  <label className={`flex items-start gap-3 p-3 rounded-xl border cursor-pointer transition-all ${
+                    deleteOptions.deletePrompts
+                      ? 'bg-accent-red/10 border-accent-red/50'
+                      : 'bg-quant-surface border-quant-border hover:border-gray-600'
+                  }`}>
+                    <input
+                      type="checkbox"
+                      checked={deleteOptions.deletePrompts}
+                      onChange={(e) => setDeleteOptions({ ...deleteOptions, deletePrompts: e.target.checked })}
+                      className="mt-0.5 w-4 h-4 rounded border-gray-600 bg-quant-surface text-accent-red focus:ring-accent-red"
+                    />
+                    <div className="flex-1">
+                      <div className="flex items-center justify-between">
+                        <span className="text-white font-medium flex items-center gap-2">
+                          <FileText size={14} className="text-accent-cyan" />
+                          Prompts
+                        </span>
+                        <span className="text-xs text-gray-500 font-mono">{dataCounts.prompts} items</span>
+                      </div>
+                      <p className="text-xs text-gray-500 mt-1">
+                        Trading strategies and configurations you've created
+                      </p>
+                      {deleteOptions.deletePrompts && eggs.length > 0 && (
+                        <div className="flex items-start gap-1.5 mt-2 p-2 rounded bg-accent-orange/10 text-accent-orange text-xs">
+                          <AlertCircle size={12} className="flex-shrink-0 mt-0.5" />
+                          <span>
+                            {eggs.filter(e => prompts.some(p => p.id === e.promptId)).length} eggs are linked to these prompts
+                          </span>
+                        </div>
+                      )}
+                    </div>
+                  </label>
+
+                  {/* Eggs */}
+                  <label className={`flex items-start gap-3 p-3 rounded-xl border cursor-pointer transition-all ${
+                    deleteOptions.deleteEggs
+                      ? 'bg-accent-red/10 border-accent-red/50'
+                      : 'bg-quant-surface border-quant-border hover:border-gray-600'
+                  }`}>
+                    <input
+                      type="checkbox"
+                      checked={deleteOptions.deleteEggs}
+                      onChange={(e) => setDeleteOptions({ ...deleteOptions, deleteEggs: e.target.checked })}
+                      className="mt-0.5 w-4 h-4 rounded border-gray-600 bg-quant-surface text-accent-red focus:ring-accent-red"
+                    />
+                    <div className="flex-1">
+                      <div className="flex items-center justify-between">
+                        <span className="text-white font-medium flex items-center gap-2">
+                          <Egg size={14} className="text-accent-yellow" />
+                          Eggs
+                        </span>
+                        <span className="text-xs text-gray-500 font-mono">
+                          {dataCounts.incubatingEggs} live, {dataCounts.hatchedEggs} hatched
+                        </span>
+                      </div>
+                      <p className="text-xs text-gray-500 mt-1">
+                        Incubating and hatched trade groups with their results
+                      </p>
+                      {deleteOptions.deleteEggs && signals.length > 0 && (
+                        <div className="flex items-start gap-1.5 mt-2 p-2 rounded bg-accent-orange/10 text-accent-orange text-xs">
+                          <AlertCircle size={12} className="flex-shrink-0 mt-0.5" />
+                          <span>
+                            {eggs.flatMap(e => e.trades).filter(id => signals.some(s => s.id === id)).length} signals are linked to these eggs
+                          </span>
+                        </div>
+                      )}
+                    </div>
+                  </label>
+
+                  {/* Signals */}
+                  <label className={`flex items-start gap-3 p-3 rounded-xl border cursor-pointer transition-all ${
+                    deleteOptions.deleteSignals
+                      ? 'bg-accent-red/10 border-accent-red/50'
+                      : 'bg-quant-surface border-quant-border hover:border-gray-600'
+                  }`}>
+                    <input
+                      type="checkbox"
+                      checked={deleteOptions.deleteSignals}
+                      onChange={(e) => setDeleteOptions({ ...deleteOptions, deleteSignals: e.target.checked })}
+                      className="mt-0.5 w-4 h-4 rounded border-gray-600 bg-quant-surface text-accent-red focus:ring-accent-red"
+                    />
+                    <div className="flex-1">
+                      <div className="flex items-center justify-between">
+                        <span className="text-white font-medium flex items-center gap-2">
+                          <BarChart3 size={14} className="text-accent-green" />
+                          Signals / Trades
+                        </span>
+                        <span className="text-xs text-gray-500 font-mono">
+                          {dataCounts.activeSignals} active, {dataCounts.closedSignals} closed
+                        </span>
+                      </div>
+                      <p className="text-xs text-gray-500 mt-1">
+                        All trade signals including active positions and history
+                      </p>
+                      {deleteOptions.deleteSignals && eggs.some(e => e.trades.length > 0) && (
+                        <div className="flex items-start gap-1.5 mt-2 p-2 rounded bg-accent-orange/10 text-accent-orange text-xs">
+                          <AlertCircle size={12} className="flex-shrink-0 mt-0.5" />
+                          <span>
+                            Eggs will lose their trade data references
+                          </span>
+                        </div>
+                      )}
+                    </div>
+                  </label>
+
+                  {/* Activity Logs */}
+                  <label className={`flex items-start gap-3 p-3 rounded-xl border cursor-pointer transition-all ${
+                    deleteOptions.deleteLogs
+                      ? 'bg-accent-red/10 border-accent-red/50'
+                      : 'bg-quant-surface border-quant-border hover:border-gray-600'
+                  }`}>
+                    <input
+                      type="checkbox"
+                      checked={deleteOptions.deleteLogs}
+                      onChange={(e) => setDeleteOptions({ ...deleteOptions, deleteLogs: e.target.checked })}
+                      className="mt-0.5 w-4 h-4 rounded border-gray-600 bg-quant-surface text-accent-red focus:ring-accent-red"
+                    />
+                    <div className="flex-1">
+                      <div className="flex items-center justify-between">
+                        <span className="text-white font-medium flex items-center gap-2">
+                          <ScrollText size={14} className="text-accent-purple" />
+                          Activity Logs
+                        </span>
+                        <span className="text-xs text-gray-500 font-mono">{dataCounts.activityLogs} entries</span>
+                      </div>
+                      <p className="text-xs text-gray-500 mt-1">
+                        Monitoring console history (prices, syncs, trades)
+                      </p>
+                    </div>
+                  </label>
+
+                  {/* Reset Onboarding */}
+                  <label className={`flex items-start gap-3 p-3 rounded-xl border cursor-pointer transition-all ${
+                    deleteOptions.resetOnboarding
+                      ? 'bg-accent-red/10 border-accent-red/50'
+                      : 'bg-quant-surface border-quant-border hover:border-gray-600'
+                  }`}>
+                    <input
+                      type="checkbox"
+                      checked={deleteOptions.resetOnboarding}
+                      onChange={(e) => setDeleteOptions({ ...deleteOptions, resetOnboarding: e.target.checked })}
+                      className="mt-0.5 w-4 h-4 rounded border-gray-600 bg-quant-surface text-accent-red focus:ring-accent-red"
+                    />
+                    <div className="flex-1">
+                      <div className="flex items-center justify-between">
+                        <span className="text-white font-medium flex items-center gap-2">
+                          <Info size={14} className="text-gray-400" />
+                          Reset Onboarding
+                        </span>
+                      </div>
+                      <p className="text-xs text-gray-500 mt-1">
+                        Show the initial setup wizard again on next app launch
+                      </p>
+                    </div>
+                  </label>
+                </div>
+
+                {/* Linked Data Handling */}
+                {(deleteOptions.deletePrompts || deleteOptions.deleteEggs || deleteOptions.deleteSignals) && (
+                  <div className="bg-quant-surface rounded-xl p-3 mb-4">
+                    <span className="text-xs text-gray-500 uppercase tracking-wider block mb-2">
+                      Linked Data Handling
+                    </span>
+                    <div className="space-y-2">
+                      <label className="flex items-center gap-3 cursor-pointer">
+                        <input
+                          type="radio"
+                          name="linkedData"
+                          checked={deleteOptions.keepLinkedData}
+                          onChange={() => setDeleteOptions({ ...deleteOptions, keepLinkedData: true })}
+                          className="w-4 h-4 border-gray-600 bg-quant-surface text-accent-cyan focus:ring-accent-cyan"
+                        />
+                        <div>
+                          <span className="text-white text-sm flex items-center gap-2">
+                            <Link size={12} className="text-accent-cyan" />
+                            Keep linked data (safe)
+                          </span>
+                          <p className="text-xs text-gray-500">
+                            Orphan linked items instead of deleting them
+                          </p>
+                        </div>
+                      </label>
+                      <label className="flex items-center gap-3 cursor-pointer">
+                        <input
+                          type="radio"
+                          name="linkedData"
+                          checked={!deleteOptions.keepLinkedData}
+                          onChange={() => setDeleteOptions({ ...deleteOptions, keepLinkedData: false })}
+                          className="w-4 h-4 border-gray-600 bg-quant-surface text-accent-red focus:ring-accent-red"
+                        />
+                        <div>
+                          <span className="text-white text-sm flex items-center gap-2">
+                            <Unlink size={12} className="text-accent-red" />
+                            Cascade delete (destructive)
+                          </span>
+                          <p className="text-xs text-gray-500">
+                            Also delete all data linked to selected items
+                          </p>
+                        </div>
+                      </label>
+                    </div>
+                  </div>
+                )}
+
+                {/* Delete Result Message */}
+                {deleteResult && (
+                  <div className="bg-accent-green/10 border border-accent-green/30 rounded-xl p-3 mb-4">
+                    <div className="flex items-center gap-2 text-accent-green text-sm">
+                      <Check size={16} />
+                      <span>Data deleted successfully</span>
+                    </div>
+                    <p className="text-xs text-gray-400 mt-1">
+                      Removed: {deleteResult.deletedPrompts} prompts, {deleteResult.deletedEggs} eggs,
+                      {deleteResult.deletedSignals} signals, {deleteResult.deletedLogs} logs
+                    </p>
+                  </div>
+                )}
+
+                {/* Action Buttons */}
+                <div className="space-y-2">
+                  <button
+                    onClick={() => anyDeleteSelected && setShowResetConfirm(true)}
+                    disabled={!anyDeleteSelected}
+                    className={`w-full py-3 rounded-xl font-medium transition-all flex items-center justify-center gap-2 ${
+                      anyDeleteSelected
+                        ? 'bg-accent-red/20 text-accent-red hover:bg-accent-red/30'
+                        : 'bg-quant-surface text-gray-600 cursor-not-allowed'
+                    }`}
+                  >
+                    <Trash2 size={16} />
+                    Delete Selected Data
+                  </button>
+
+                  <button
+                    onClick={() => {
+                      setDeleteOptions({
+                        deletePrompts: true,
+                        deleteEggs: true,
+                        deleteSignals: true,
+                        deleteLogs: true,
+                        resetOnboarding: true,
+                        keepLinkedData: false
+                      })
+                      setShowResetConfirm(true)
+                    }}
+                    className="w-full py-2 rounded-xl font-medium bg-transparent border border-accent-red/30 text-accent-red/70 hover:bg-accent-red/10 hover:text-accent-red transition-all text-sm"
+                  >
+                    Nuclear Option: Delete Everything & Restart
+                  </button>
+                </div>
               </div>
 
-              {/* Reset Confirmation Modal */}
+              {/* Delete Confirmation Modal */}
               <AnimatePresence>
                 {showResetConfirm && (
                   <motion.div
@@ -729,17 +1096,69 @@ export default function Settings() {
                       animate={{ scale: 1, opacity: 1 }}
                       exit={{ scale: 0.9, opacity: 0 }}
                       onClick={(e) => e.stopPropagation()}
-                      className="bg-quant-card border border-accent-red/30 rounded-2xl p-6 max-w-sm w-full"
+                      className="bg-quant-card border border-accent-red/30 rounded-2xl p-5 max-w-md w-full max-h-[80vh] overflow-y-auto"
                     >
-                      <div className="text-center mb-6">
-                        <div className="w-16 h-16 rounded-full bg-accent-red/20 flex items-center justify-center mx-auto mb-4">
-                          <Trash2 size={32} className="text-accent-red" />
+                      <div className="text-center mb-4">
+                        <div className="w-14 h-14 rounded-full bg-accent-red/20 flex items-center justify-center mx-auto mb-3">
+                          <Trash2 size={28} className="text-accent-red" />
                         </div>
-                        <h3 className="text-xl font-bold text-white mb-2">Reset All Data?</h3>
+                        <h3 className="text-lg font-bold text-white mb-1">Confirm Deletion</h3>
                         <p className="text-sm text-gray-400">
-                          This will permanently delete all your prompts, eggs, signals, and settings. This action cannot be undone.
+                          This action cannot be undone
                         </p>
                       </div>
+
+                      {/* What will be deleted */}
+                      <div className="bg-quant-surface rounded-xl p-3 mb-4">
+                        <span className="text-xs text-gray-500 uppercase tracking-wider block mb-2">
+                          Will be deleted:
+                        </span>
+                        <ul className="space-y-1">
+                          {getDeleteImpact().impact.map((item, i) => (
+                            <li key={i} className="flex items-center gap-2 text-sm text-white">
+                              <X size={12} className="text-accent-red" />
+                              {item}
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+
+                      {/* Warnings */}
+                      {getDeleteImpact().warnings.length > 0 && (
+                        <div className="bg-accent-orange/10 border border-accent-orange/30 rounded-xl p-3 mb-4">
+                          <span className="text-xs text-accent-orange uppercase tracking-wider block mb-2 flex items-center gap-1">
+                            <AlertCircle size={12} />
+                            Cascade Effects
+                          </span>
+                          <ul className="space-y-1">
+                            {getDeleteImpact().warnings.map((warning, i) => (
+                              <li key={i} className="text-xs text-accent-orange">
+                                • {warning}
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
+
+                      {/* Mode indicator */}
+                      <div className={`rounded-xl p-2 mb-4 text-xs flex items-center gap-2 ${
+                        deleteOptions.keepLinkedData
+                          ? 'bg-accent-cyan/10 text-accent-cyan'
+                          : 'bg-accent-red/10 text-accent-red'
+                      }`}>
+                        {deleteOptions.keepLinkedData ? (
+                          <>
+                            <Link size={12} />
+                            Safe mode: linked data will be preserved
+                          </>
+                        ) : (
+                          <>
+                            <Unlink size={12} />
+                            Cascade mode: all linked data will be deleted
+                          </>
+                        )}
+                      </div>
+
                       <div className="flex gap-3">
                         <button
                           onClick={() => setShowResetConfirm(false)}
@@ -747,15 +1166,26 @@ export default function Settings() {
                         >
                           Cancel
                         </button>
-                        <button
-                          onClick={() => {
-                            setShowResetConfirm(false)
-                            resetAllData()
-                          }}
-                          className="flex-1 py-3 rounded-xl bg-accent-red text-white font-medium hover:bg-accent-red/80 transition-colors"
-                        >
-                          Reset Everything
-                        </button>
+                        {deleteOptions.deletePrompts && deleteOptions.deleteEggs &&
+                         deleteOptions.deleteSignals && deleteOptions.deleteLogs &&
+                         deleteOptions.resetOnboarding && !deleteOptions.keepLinkedData ? (
+                          <button
+                            onClick={() => {
+                              setShowResetConfirm(false)
+                              resetAllData()
+                            }}
+                            className="flex-1 py-3 rounded-xl bg-accent-red text-white font-medium hover:bg-accent-red/80 transition-colors"
+                          >
+                            Reset Everything
+                          </button>
+                        ) : (
+                          <button
+                            onClick={handleSelectiveDelete}
+                            className="flex-1 py-3 rounded-xl bg-accent-red text-white font-medium hover:bg-accent-red/80 transition-colors"
+                          >
+                            Delete Selected
+                          </button>
+                        )}
                       </div>
                     </motion.div>
                   </motion.div>
