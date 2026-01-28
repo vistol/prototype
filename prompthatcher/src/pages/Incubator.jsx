@@ -393,70 +393,84 @@ export default function Incubator() {
                         className="border-t border-quant-border overflow-hidden"
                       >
                         <div className="p-3 space-y-4 bg-quant-surface/20">
-                          {/* Configuration Section */}
+                          {/* Configuration Section - Option C: Minimalist Dashboard */}
                           {egg.config && (
-                            <div className="bg-quant-card rounded-xl p-3 border border-quant-border">
-                              <span className="text-[10px] text-gray-500 uppercase tracking-wider block mb-2">Configuration</span>
-                              <div className="grid grid-cols-3 gap-2">
-                                <div className="flex items-center gap-1.5">
-                                  <DollarSign size={12} className="text-accent-cyan" />
-                                  <span className="text-xs text-gray-400">Capital</span>
-                                  <span className="text-xs font-mono text-white ml-auto">${egg.config.capital}</span>
-                                </div>
-                                <div className="flex items-center gap-1.5">
-                                  <Zap size={12} className="text-accent-yellow" />
-                                  <span className="text-xs text-gray-400">Leverage</span>
-                                  <span className="text-xs font-mono text-white ml-auto">{egg.config.leverage}x</span>
-                                </div>
-                                <div className="flex items-center gap-1.5">
-                                  <Clock size={12} className="text-accent-purple" />
-                                  <span className="text-xs text-gray-400">Time</span>
-                                  <span className="text-xs text-white ml-auto">{EXECUTION_LABELS[egg.config.executionTime] || egg.config.executionTime}</span>
-                                </div>
-                                {egg.config.targetPct && (
-                                  <div className="col-span-3 mt-2 p-2 rounded-lg bg-gradient-to-r from-accent-cyan/20 to-accent-green/20 border border-accent-cyan/30">
-                                    <div className="flex items-center justify-between">
-                                      <div className="flex items-center gap-2">
-                                        <div className="w-8 h-8 rounded-full bg-accent-cyan/20 flex items-center justify-center">
-                                          <TrendingUp size={16} className="text-accent-cyan" />
-                                        </div>
-                                        <div>
-                                          <span className="text-[10px] text-gray-400 block">OBJETIVO DE GANANCIA</span>
-                                          <span className="text-sm text-white font-bold">
-                                            Ganar +{egg.config.targetPct}% sobre tu capital
-                                          </span>
-                                        </div>
-                                      </div>
-                                      <div className="text-right">
-                                        <span className="text-accent-green font-bold text-lg block">
-                                          +${((egg.config.capital * egg.config.targetPct) / 100).toFixed(0)}
-                                        </span>
-                                        <span className="text-[10px] text-gray-400">
-                                          de ${egg.config.capital}
-                                        </span>
-                                      </div>
-                                    </div>
-                                    <div className="text-[10px] text-gray-500 mt-1 text-center">
-                                      Con {egg.config.leverage}x leverage, el precio solo necesita moverse {(egg.config.targetPct / egg.config.leverage).toFixed(1)}% para lograr tu objetivo
-                                    </div>
+                            <div className="bg-quant-card rounded-xl p-4 border border-quant-border">
+                              {/* Investment Flow */}
+                              <div className="flex items-center justify-between mb-3">
+                                {/* Left: Investment */}
+                                <div className="text-center">
+                                  <div className="text-lg font-bold text-white font-mono">
+                                    ${egg.config.capital}
                                   </div>
-                                )}
-                                <div className="flex items-center gap-1.5">
-                                  <Cpu size={12} className="text-accent-green" />
-                                  <span className="text-xs text-gray-400">AI</span>
-                                  <span className="text-xs text-white ml-auto">
-                                    {AI_MODEL_LABELS[egg.config.aiModel]?.icon} {AI_MODEL_LABELS[egg.config.aiModel]?.name || egg.config.aiModel}
-                                  </span>
+                                  <div className="text-[10px] text-gray-500">
+                                    con {egg.config.leverage}x
+                                  </div>
+                                  <div className="text-[10px] text-gray-400 mt-0.5">
+                                    tu inversión
+                                  </div>
                                 </div>
-                                <div className="flex items-center gap-1.5">
-                                  <Target size={12} className="text-accent-orange" />
-                                  <span className="text-xs text-gray-400">Min IPE</span>
-                                  <span className="text-xs font-mono text-white ml-auto">{egg.config.minIpe}%</span>
+
+                                {/* Center: Arrow with percentage */}
+                                <div className="flex-1 flex items-center justify-center px-3">
+                                  <div className="flex items-center gap-2">
+                                    <div className="h-px w-6 bg-gradient-to-r from-transparent to-accent-cyan"></div>
+                                    <div className="px-3 py-1 rounded-full bg-accent-cyan/10 border border-accent-cyan/30">
+                                      <span className="text-accent-cyan font-bold text-sm">
+                                        {egg.config.targetPct ? `+${egg.config.targetPct}%` : '—'}
+                                      </span>
+                                    </div>
+                                    <div className="h-px w-6 bg-gradient-to-r from-accent-cyan to-accent-green"></div>
+                                    <TrendingUp size={14} className="text-accent-green" />
+                                  </div>
                                 </div>
-                                <div className="flex items-center gap-1.5">
-                                  <Hash size={12} className="text-gray-400" />
-                                  <span className="text-xs text-gray-400">Results</span>
-                                  <span className="text-xs font-mono text-white ml-auto">{egg.config.numResults}</span>
+
+                                {/* Right: Potential Gain */}
+                                <div className="text-center">
+                                  <div className="text-lg font-bold text-accent-green font-mono">
+                                    {egg.config.targetPct
+                                      ? `+$${((egg.config.capital * egg.config.targetPct) / 100).toFixed(0)}`
+                                      : '—'
+                                    }
+                                  </div>
+                                  <div className="text-[10px] text-gray-500">
+                                    objetivo
+                                  </div>
+                                  <div className="text-[10px] text-accent-green mt-0.5">
+                                    ganancia
+                                  </div>
+                                </div>
+                              </div>
+
+                              {/* Explanation Box */}
+                              {egg.config.targetPct && (
+                                <div className="mb-3 px-3 py-2 rounded-lg bg-quant-surface border border-quant-border">
+                                  <div className="flex items-center gap-2 text-xs text-gray-300">
+                                    <Activity size={12} className="text-accent-cyan shrink-0" />
+                                    <span>
+                                      Precio debe moverse <span className="text-accent-cyan font-mono font-medium">{(egg.config.targetPct / egg.config.leverage).toFixed(1)}%</span> para ganar <span className="text-accent-green font-medium">+{egg.config.targetPct}%</span>
+                                    </span>
+                                  </div>
+                                </div>
+                              )}
+
+                              {/* Config Pills Row */}
+                              <div className="flex items-center justify-between gap-2 text-[10px]">
+                                <div className="flex items-center gap-1 px-2 py-1 rounded-md bg-quant-surface text-gray-400">
+                                  <Clock size={10} className="text-accent-purple" />
+                                  <span>{EXECUTION_LABELS[egg.config.executionTime] || egg.config.executionTime}</span>
+                                </div>
+                                <div className="flex items-center gap-1 px-2 py-1 rounded-md bg-quant-surface text-gray-400">
+                                  <span>{AI_MODEL_LABELS[egg.config.aiModel]?.icon}</span>
+                                  <span>{AI_MODEL_LABELS[egg.config.aiModel]?.name || egg.config.aiModel}</span>
+                                </div>
+                                <div className="flex items-center gap-1 px-2 py-1 rounded-md bg-quant-surface text-gray-400">
+                                  <Target size={10} className="text-accent-orange" />
+                                  <span>IPE {egg.config.minIpe}%</span>
+                                </div>
+                                <div className="flex items-center gap-1 px-2 py-1 rounded-md bg-quant-surface text-gray-400">
+                                  <Hash size={10} />
+                                  <span>{egg.config.numResults}</span>
                                 </div>
                               </div>
                             </div>
