@@ -21,7 +21,7 @@ const AI_MODEL_LABELS = {
 }
 
 export default function Hatchlings() {
-  const { eggs, signals } = useStore()
+  const { eggs, signals, prices } = useStore()
   const [expandedEgg, setExpandedEgg] = useState(null)
   const [sortBy, setSortBy] = useState('pnl') // 'pnl', 'winRate', 'profitFactor', 'date'
   const [filterBy, setFilterBy] = useState('all') // 'all', 'profitable', 'unprofitable', 'hatched', 'expired'
@@ -29,15 +29,44 @@ export default function Hatchlings() {
   // Check if egg is expired
   const isEggExpired = (egg) => egg.expiresAt && new Date(egg.expiresAt) <= new Date()
 
-  // Calculate results for an egg (pnl is now percentage)
+  // Calculate PnL percentage for a signal
+  const getSignalPnl = (signal) => {
+    // If closed, use stored pnl
+    if (signal.status === 'closed' && signal.pnl !== undefined) {
+      return signal.pnl
+    }
+    // If has unrealizedPnl from price check
+    if (signal.unrealizedPnl !== undefined) {
+      return signal.unrealizedPnl
+    }
+    // Calculate from current price
+    const currentPrice = prices[signal.asset]?.price
+    if (!currentPrice) return 0
+    const entry = parseFloat(signal.entry)
+    if (signal.strategy === 'LONG') {
+      return ((currentPrice - entry) / entry) * 100
+    } else {
+      return ((entry - currentPrice) / entry) * 100
+    }
+  }
+
+  // Calculate results for an egg (handles both closed and expired trades)
   const calculateEggResults = (egg) => {
     const eggSignals = signals.filter(s => egg.trades.includes(s.id))
     const closedSignals = eggSignals.filter(s => s.status === 'closed')
+    const activeSignals = eggSignals.filter(s => s.status === 'active')
 
-    if (closedSignals.length === 0) {
+    // For expired eggs, treat active trades as "expired" with their unrealized PnL
+    const expired = isEggExpired(egg)
+
+    // All signals to consider for PnL calculation
+    const signalsForPnl = expired ? eggSignals : closedSignals
+
+    if (signalsForPnl.length === 0) {
       return {
         totalTrades: eggSignals.length,
-        closedTrades: 0,
+        closedTrades: closedSignals.length,
+        expiredTrades: expired ? activeSignals.length : 0,
         wins: 0,
         losses: 0,
         winRate: 0,
@@ -48,26 +77,28 @@ export default function Hatchlings() {
       }
     }
 
-    const wins = closedSignals.filter(s => s.result === 'win').length
-    const losses = closedSignals.length - wins
+    // Calculate PnL for all relevant signals
+    const pnlValues = signalsForPnl.map(s => getSignalPnl(s))
+    const avgPnl = pnlValues.reduce((sum, p) => sum + p, 0) / pnlValues.length
 
-    // pnl is now percentage - calculate average
-    const totalPnlPercent = closedSignals.reduce((sum, s) => sum + (s.pnl || 0), 0)
-    const avgPnl = totalPnlPercent / closedSignals.length
+    // Count wins/losses based on PnL
+    const wins = pnlValues.filter(p => p > 0).length
+    const losses = pnlValues.filter(p => p < 0).length
 
-    // Profit factor using percentage
-    const grossProfit = closedSignals.filter(s => (s.pnl || 0) > 0).reduce((sum, s) => sum + s.pnl, 0)
-    const grossLoss = Math.abs(closedSignals.filter(s => (s.pnl || 0) < 0).reduce((sum, s) => sum + s.pnl, 0))
+    // Profit factor
+    const grossProfit = pnlValues.filter(p => p > 0).reduce((sum, p) => sum + p, 0)
+    const grossLoss = Math.abs(pnlValues.filter(p => p < 0).reduce((sum, p) => sum + p, 0))
 
     const avgIpe = eggSignals.reduce((sum, s) => sum + (s.ipe || 0), 0) / eggSignals.length
 
     return {
       totalTrades: eggSignals.length,
       closedTrades: closedSignals.length,
+      expiredTrades: expired ? activeSignals.length : 0,
       wins,
       losses,
-      winRate: closedSignals.length > 0 ? Math.round((wins / closedSignals.length) * 100) : 0,
-      totalPnl: avgPnl, // Average PnL percentage
+      winRate: signalsForPnl.length > 0 ? Math.round((wins / signalsForPnl.length) * 100) : 0,
+      totalPnl: avgPnl,
       profitFactor: grossLoss > 0 ? grossProfit / grossLoss : (grossProfit > 0 ? Infinity : 0),
       avgIpe: Math.round(avgIpe),
       maxDrawdown: 0
@@ -549,54 +580,58 @@ export default function Hatchlings() {
                                 Trade History ({eggSignals.length})
                               </span>
                               <div className="space-y-2">
-                                {eggSignals.map((signal) => (
-                                  <div
-                                    key={signal.id}
-                                    className={`bg-quant-card rounded-xl p-3 border ${
-                                      signal.result === 'win'
-                                        ? 'border-accent-green/30'
-                                        : signal.result === 'loss'
-                                          ? 'border-accent-red/30'
-                                          : 'border-quant-border'
-                                    }`}
-                                  >
-                                    <div className="flex items-center justify-between">
-                                      <div className="flex items-center gap-2">
-                                        <span className={`text-xs font-bold px-2 py-0.5 rounded ${
-                                          signal.strategy === 'LONG'
-                                            ? 'bg-accent-green/20 text-accent-green'
-                                            : 'bg-accent-red/20 text-accent-red'
-                                        }`}>
-                                          {signal.strategy}
-                                        </span>
-                                        <span className="font-medium text-white">{signal.asset}</span>
-                                        {signal.status !== 'closed' && (
-                                          <span className="text-[10px] px-1.5 py-0.5 rounded bg-accent-orange/20 text-accent-orange">
-                                            Open
+                                {eggSignals.map((signal) => {
+                                  const signalPnl = getSignalPnl(signal)
+                                  const isExpiredTrade = egg.isExpired && signal.status !== 'closed'
+                                  return (
+                                    <div
+                                      key={signal.id}
+                                      className={`bg-quant-card rounded-xl p-3 border ${
+                                        signal.result === 'win'
+                                          ? 'border-accent-green/30'
+                                          : signal.result === 'loss'
+                                            ? 'border-accent-red/30'
+                                            : isExpiredTrade
+                                              ? 'border-accent-orange/30'
+                                              : 'border-quant-border'
+                                      }`}
+                                    >
+                                      <div className="flex items-center justify-between">
+                                        <div className="flex items-center gap-2">
+                                          <span className={`text-xs font-bold px-2 py-0.5 rounded ${
+                                            signal.strategy === 'LONG'
+                                              ? 'bg-accent-green/20 text-accent-green'
+                                              : 'bg-accent-red/20 text-accent-red'
+                                          }`}>
+                                            {signal.strategy}
                                           </span>
-                                        )}
+                                          <span className="font-medium text-white">{signal.asset}</span>
+                                          {isExpiredTrade && (
+                                            <span className="text-[10px] px-1.5 py-0.5 rounded bg-accent-orange/20 text-accent-orange">
+                                              Expired
+                                            </span>
+                                          )}
+                                        </div>
+                                        <span className={`font-mono font-bold ${
+                                          signalPnl >= 0 ? 'text-accent-green' : 'text-accent-red'
+                                        }`}>
+                                          {signalPnl >= 0 ? '+' : ''}{signalPnl.toFixed(2)}%
+                                        </span>
                                       </div>
-                                      <span className={`font-mono font-bold ${
-                                        signal.pnl >= 0 ? 'text-accent-green' : 'text-accent-red'
-                                      }`}>
-                                        {signal.pnl !== undefined ? (
-                                          <>{signal.pnl >= 0 ? '+' : ''}{(signal.pnl || 0).toFixed(2)}%</>
-                                        ) : '-'}
-                                      </span>
+                                      <div className="flex items-center justify-between mt-2 text-xs text-gray-500">
+                                        <span>Entry: <span className="text-white font-mono">${signal.entry}</span></span>
+                                        <span className={signal.result === 'win' ? 'text-accent-green' : signal.result === 'loss' ? 'text-accent-red' : 'text-gray-400'}>
+                                          {signal.result === 'win' ? `TP: $${signal.takeProfit}` : signal.result === 'loss' ? `SL: $${signal.stopLoss}` : `TP: $${signal.takeProfit}`}
+                                        </span>
+                                        <span className={`font-bold ${
+                                          signal.ipe >= 80 ? 'text-accent-green' : 'text-accent-yellow'
+                                        }`}>
+                                          IPE: {signal.ipe}%
+                                        </span>
+                                      </div>
                                     </div>
-                                    <div className="flex items-center justify-between mt-2 text-xs text-gray-500">
-                                      <span>Entry: <span className="text-white font-mono">${signal.entry}</span></span>
-                                      <span className={signal.result === 'win' ? 'text-accent-green' : signal.result === 'loss' ? 'text-accent-red' : 'text-gray-400'}>
-                                        {signal.result === 'win' ? `TP: $${signal.takeProfit}` : signal.result === 'loss' ? `SL: $${signal.stopLoss}` : `TP: $${signal.takeProfit}`}
-                                      </span>
-                                      <span className={`font-bold ${
-                                        signal.ipe >= 80 ? 'text-accent-green' : 'text-accent-yellow'
-                                      }`}>
-                                        IPE: {signal.ipe}%
-                                      </span>
-                                    </div>
-                                  </div>
-                                ))}
+                                  )
+                                })}
                               </div>
                             </div>
                           </div>
