@@ -1,6 +1,29 @@
 // AI Service for generating trading signals from prompts
 import { fetchBinancePrices } from './priceService'
 
+// Minimum Risk/Reward ratio (Shell Calibration)
+const MIN_RISK_REWARD_RATIO = 2.0 // Minimum 1:2 (reward must be 2x the risk)
+
+// Calculate R:R ratio
+export const calculateRiskReward = (entry, takeProfit, stopLoss, strategy) => {
+  const entryPrice = parseFloat(entry)
+  const tp = parseFloat(takeProfit)
+  const sl = parseFloat(stopLoss)
+
+  let reward, risk
+
+  if (strategy === 'LONG') {
+    reward = tp - entryPrice
+    risk = entryPrice - sl
+  } else {
+    reward = entryPrice - tp
+    risk = sl - entryPrice
+  }
+
+  if (risk <= 0) return 0
+  return reward / risk
+}
+
 // Calculate IPE using standard formula if prompt doesn't specify one
 export const calculateStandardIPE = (trade) => {
   // Fundamental factors (simulated - in production these would come from real data)
@@ -94,18 +117,26 @@ export const generateTradesFromPrompt = async (prompt, settings, numResults = 3)
     const decimals = getDecimalPlaces(asset, currentPrice)
 
     // Calculate entry, TP, and SL based on strategy
-    let entry, takeProfit, stopLoss
+    // SHELL CALIBRATION: Enforce minimum 1:2 Risk/Reward ratio
+    let entry, takeProfit, stopLoss, riskPercent, rewardPercent
+
+    // Risk: 1.5-3% (tighter stops for better R:R)
+    riskPercent = 0.015 + Math.random() * 0.015 // 1.5-3%
+
+    // Reward: At least 2x the risk (Shell Calibration)
+    const rrMultiplier = MIN_RISK_REWARD_RATIO + Math.random() * 1.5 // 2.0-3.5x
+    rewardPercent = riskPercent * rrMultiplier
 
     if (strategy === 'LONG') {
       // Entry at current price (or slightly below for limit order)
-      entry = currentPrice * (1 - Math.random() * 0.005) // 0-0.5% below current
-      takeProfit = entry * (1 + 0.03 + Math.random() * 0.05) // 3-8% profit target
-      stopLoss = entry * (1 - 0.02 - Math.random() * 0.03) // 2-5% stop loss
+      entry = currentPrice * (1 - Math.random() * 0.003) // 0-0.3% below current
+      stopLoss = entry * (1 - riskPercent)
+      takeProfit = entry * (1 + rewardPercent)
     } else {
       // Entry at current price (or slightly above for limit order)
-      entry = currentPrice * (1 + Math.random() * 0.005) // 0-0.5% above current
-      takeProfit = entry * (1 - 0.03 - Math.random() * 0.05) // 3-8% profit target
-      stopLoss = entry * (1 + 0.02 + Math.random() * 0.03) // 2-5% stop loss
+      entry = currentPrice * (1 + Math.random() * 0.003) // 0-0.3% above current
+      stopLoss = entry * (1 + riskPercent)
+      takeProfit = entry * (1 - rewardPercent)
     }
 
     // Generate explanation based on prompt mode
@@ -129,6 +160,9 @@ export const generateTradesFromPrompt = async (prompt, settings, numResults = 3)
 
     const shuffledInsights = [...insightPool].sort(() => Math.random() - 0.5)
 
+    // Calculate actual R:R ratio
+    const rrRatio = calculateRiskReward(entry, takeProfit, stopLoss, strategy)
+
     const trade = {
       id: `trade-${Date.now()}-${i}-${Math.random().toString(36).substr(2, 9)}`,
       promptId: prompt.id,
@@ -139,6 +173,9 @@ export const generateTradesFromPrompt = async (prompt, settings, numResults = 3)
       takeProfit: takeProfit.toFixed(decimals),
       stopLoss: stopLoss.toFixed(decimals),
       currentPrice: currentPrice.toFixed(decimals), // Store the real price for reference
+      riskRewardRatio: rrRatio.toFixed(2), // Shell Calibration: Store R:R ratio
+      riskPercent: (riskPercent * 100).toFixed(2),
+      rewardPercent: (rewardPercent * 100).toFixed(2),
       ipe: calculateStandardIPE({ asset, strategy }),
       explanation: explanations[Math.floor(Math.random() * explanations.length)],
       insights: shuffledInsights.slice(0, 3),
@@ -173,17 +210,24 @@ export const generateTradesFromPrompt = async (prompt, settings, numResults = 3)
     const strategy = Math.random() > 0.5 ? 'LONG' : 'SHORT'
     const decimals = getDecimalPlaces(extraAsset, currentPrice)
 
+    // SHELL CALIBRATION: Same R:R logic for extra trades
+    const extraRiskPercent = 0.015 + Math.random() * 0.015
+    const extraRrMultiplier = MIN_RISK_REWARD_RATIO + Math.random() * 1.5
+    const extraRewardPercent = extraRiskPercent * extraRrMultiplier
+
     let entry, takeProfit, stopLoss
 
     if (strategy === 'LONG') {
-      entry = currentPrice * (1 - Math.random() * 0.005)
-      takeProfit = entry * (1 + 0.03 + Math.random() * 0.05)
-      stopLoss = entry * (1 - 0.02 - Math.random() * 0.03)
+      entry = currentPrice * (1 - Math.random() * 0.003)
+      stopLoss = entry * (1 - extraRiskPercent)
+      takeProfit = entry * (1 + extraRewardPercent)
     } else {
-      entry = currentPrice * (1 + Math.random() * 0.005)
-      takeProfit = entry * (1 - 0.03 - Math.random() * 0.05)
-      stopLoss = entry * (1 + 0.02 + Math.random() * 0.03)
+      entry = currentPrice * (1 + Math.random() * 0.003)
+      stopLoss = entry * (1 + extraRiskPercent)
+      takeProfit = entry * (1 - extraRewardPercent)
     }
+
+    const extraRrRatio = calculateRiskReward(entry, takeProfit, stopLoss, strategy)
 
     trades.push({
       id: `trade-${Date.now()}-extra-${Math.random().toString(36).substr(2, 9)}`,
@@ -195,9 +239,12 @@ export const generateTradesFromPrompt = async (prompt, settings, numResults = 3)
       takeProfit: takeProfit.toFixed(decimals),
       stopLoss: stopLoss.toFixed(decimals),
       currentPrice: currentPrice.toFixed(decimals),
+      riskRewardRatio: extraRrRatio.toFixed(2),
+      riskPercent: (extraRiskPercent * 100).toFixed(2),
+      rewardPercent: (extraRewardPercent * 100).toFixed(2),
       ipe: Math.max(prompt.minIpe || 70, Math.floor(Math.random() * 15 + 75)),
       explanation: `AI-generated opportunity for ${extraAsset} based on market analysis.`,
-      insights: ['Favorable market conditions', 'Technical setup confirmed', 'Risk/reward ratio optimal'],
+      insights: ['Favorable market conditions', 'Technical setup confirmed', `R:R ratio ${extraRrRatio.toFixed(1)}:1`],
       executionTime: prompt.executionTime,
       leverage: prompt.leverage,
       capital: prompt.capital / numResults,

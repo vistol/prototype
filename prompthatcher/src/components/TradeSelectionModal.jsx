@@ -1,5 +1,5 @@
 import { motion } from 'framer-motion'
-import { X, Check, TrendingUp, TrendingDown, Loader2, AlertCircle, CheckSquare, Square } from 'lucide-react'
+import { X, Check, TrendingUp, TrendingDown, Loader2, AlertCircle, CheckSquare, Square, Shield } from 'lucide-react'
 import useStore from '../store/useStore'
 import EggIcon from './EggIcon'
 
@@ -203,6 +203,29 @@ export default function TradeSelectionModal({ prompt, onClose, onComplete }) {
                   </div>
                 </div>
 
+                {/* Shell Calibration: R:R Ratio & Risk/Reward */}
+                <div className="flex items-center gap-2 mb-3">
+                  <div className="flex-1 bg-quant-bg/50 rounded-lg p-2 flex items-center gap-2">
+                    <Shield size={14} className="text-accent-cyan" />
+                    <div>
+                      <span className="text-[10px] text-gray-500 block">R:R Ratio</span>
+                      <span className={`font-mono text-sm font-bold ${
+                        parseFloat(trade.riskRewardRatio) >= 2 ? 'text-accent-green' : 'text-accent-yellow'
+                      }`}>
+                        1:{trade.riskRewardRatio}
+                      </span>
+                    </div>
+                  </div>
+                  <div className="flex-1 bg-quant-bg/50 rounded-lg p-2">
+                    <span className="text-[10px] text-gray-500 block">Risk</span>
+                    <span className="font-mono text-sm text-accent-red">-{trade.riskPercent}%</span>
+                  </div>
+                  <div className="flex-1 bg-quant-bg/50 rounded-lg p-2">
+                    <span className="text-[10px] text-gray-500 block">Reward</span>
+                    <span className="font-mono text-sm text-accent-green">+{trade.rewardPercent}%</span>
+                  </div>
+                </div>
+
                 {/* IPE Score */}
                 <div className="flex items-center justify-between">
                   <span className="text-xs text-gray-500">Success Probability (IPE)</span>
@@ -225,13 +248,23 @@ export default function TradeSelectionModal({ prompt, onClose, onComplete }) {
               {selectedCount} of {pendingTrades.length} trades selected
             </span>
             {selectedCount > 0 && (
-              <span className="text-accent-cyan">
-                Avg IPE: {Math.round(
-                  pendingTrades
-                    .filter(t => t.selected)
-                    .reduce((sum, t) => sum + t.ipe, 0) / selectedCount
-                )}%
-              </span>
+              <div className="flex items-center gap-3">
+                <span className="text-accent-green flex items-center gap-1">
+                  <Shield size={12} />
+                  R:R 1:{(
+                    pendingTrades
+                      .filter(t => t.selected)
+                      .reduce((sum, t) => sum + parseFloat(t.riskRewardRatio || 0), 0) / selectedCount
+                  ).toFixed(1)}
+                </span>
+                <span className="text-accent-cyan">
+                  IPE: {Math.round(
+                    pendingTrades
+                      .filter(t => t.selected)
+                      .reduce((sum, t) => sum + t.ipe, 0) / selectedCount
+                  )}%
+                </span>
+              </div>
             )}
           </div>
 
