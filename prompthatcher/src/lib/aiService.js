@@ -103,6 +103,7 @@ export const generateTradesFromPrompt = async (prompt, settings, numResults = 3)
   }
 
   console.log('Real prices fetched:', realPrices)
+  console.log('Prompt config:', { targetPct: prompt.targetPct, leverage: prompt.leverage, executionTime: prompt.executionTime })
 
   for (let i = 0; i < numResults; i++) {
     const asset = selectedAssets[i]
@@ -116,16 +117,41 @@ export const generateTradesFromPrompt = async (prompt, settings, numResults = 3)
     const strategy = Math.random() > 0.5 ? 'LONG' : 'SHORT'
     const decimals = getDecimalPlaces(asset, currentPrice)
 
-    // Calculate entry, TP, and SL based on strategy
-    // SHELL CALIBRATION: Enforce minimum 1:2 Risk/Reward ratio
+    // Calculate entry, TP, and SL based on strategy and execution mode
     let entry, takeProfit, stopLoss, riskPercent, rewardPercent
 
-    // Risk: 1.5-3% (tighter stops for better R:R)
-    riskPercent = 0.015 + Math.random() * 0.015 // 1.5-3%
+    // Check if using target-based execution with a profit target
+    const useTargetBased = prompt.executionTime === 'target' && prompt.targetPct > 0
+    const leverage = prompt.leverage || 5
+    const targetPct = prompt.targetPct || 10 // Default 10% if not specified
 
-    // Reward: At least 2x the risk (Shell Calibration)
-    const rrMultiplier = MIN_RISK_REWARD_RATIO + Math.random() * 1.5 // 2.0-3.5x
-    rewardPercent = riskPercent * rrMultiplier
+    if (useTargetBased) {
+      // TARGET-BASED MODE: Calculate TP/SL based on user's profit target and leverage
+      //
+      // Formula: To achieve X% profit on capital with Y leverage,
+      // the price needs to move by (X / Y) percent
+      //
+      // Example: 100% profit (2x) with 5x leverage = 20% price move needed
+
+      const priceMovementNeeded = targetPct / leverage / 100 // Convert to decimal
+
+      // Risk: Set SL at a reasonable distance (typically 1/2 to 1/3 of the reward)
+      // This maintains a good R:R ratio while respecting the target
+      const riskRatio = 0.4 // Risk 40% of reward distance for ~2.5:1 R:R
+      riskPercent = priceMovementNeeded * riskRatio
+      rewardPercent = priceMovementNeeded
+
+      console.log(`Target mode: ${targetPct}% profit @ ${leverage}x = ${(priceMovementNeeded * 100).toFixed(2)}% price move needed`)
+
+    } else {
+      // NON-TARGET MODE: Use the standard shell calibration R:R approach
+      // Risk: 1.5-3% (tighter stops for better R:R)
+      riskPercent = 0.015 + Math.random() * 0.015 // 1.5-3%
+
+      // Reward: At least 2x the risk (Shell Calibration)
+      const rrMultiplier = MIN_RISK_REWARD_RATIO + Math.random() * 1.5 // 2.0-3.5x
+      rewardPercent = riskPercent * rrMultiplier
+    }
 
     if (strategy === 'LONG') {
       // Entry at current price (or slightly below for limit order)
@@ -176,6 +202,7 @@ export const generateTradesFromPrompt = async (prompt, settings, numResults = 3)
       riskRewardRatio: rrRatio.toFixed(2), // Shell Calibration: Store R:R ratio
       riskPercent: (riskPercent * 100).toFixed(2),
       rewardPercent: (rewardPercent * 100).toFixed(2),
+      targetPct: useTargetBased ? targetPct : null, // Store target % for reference
       ipe: calculateStandardIPE({ asset, strategy }),
       explanation: explanations[Math.floor(Math.random() * explanations.length)],
       insights: shuffledInsights.slice(0, 3),
@@ -210,12 +237,23 @@ export const generateTradesFromPrompt = async (prompt, settings, numResults = 3)
     const strategy = Math.random() > 0.5 ? 'LONG' : 'SHORT'
     const decimals = getDecimalPlaces(extraAsset, currentPrice)
 
-    // SHELL CALIBRATION: Same R:R logic for extra trades
-    const extraRiskPercent = 0.015 + Math.random() * 0.015
-    const extraRrMultiplier = MIN_RISK_REWARD_RATIO + Math.random() * 1.5
-    const extraRewardPercent = extraRiskPercent * extraRrMultiplier
+    // Use same target-based logic for extra trades
+    const useTargetBased = prompt.executionTime === 'target' && prompt.targetPct > 0
+    const leverage = prompt.leverage || 5
+    const targetPct = prompt.targetPct || 10
 
     let entry, takeProfit, stopLoss
+    let extraRiskPercent, extraRewardPercent
+
+    if (useTargetBased) {
+      const priceMovementNeeded = targetPct / leverage / 100
+      extraRiskPercent = priceMovementNeeded * 0.4
+      extraRewardPercent = priceMovementNeeded
+    } else {
+      extraRiskPercent = 0.015 + Math.random() * 0.015
+      const extraRrMultiplier = MIN_RISK_REWARD_RATIO + Math.random() * 1.5
+      extraRewardPercent = extraRiskPercent * extraRrMultiplier
+    }
 
     if (strategy === 'LONG') {
       entry = currentPrice * (1 - Math.random() * 0.003)
@@ -242,6 +280,7 @@ export const generateTradesFromPrompt = async (prompt, settings, numResults = 3)
       riskRewardRatio: extraRrRatio.toFixed(2),
       riskPercent: (extraRiskPercent * 100).toFixed(2),
       rewardPercent: (extraRewardPercent * 100).toFixed(2),
+      targetPct: useTargetBased ? targetPct : null,
       ipe: Math.max(prompt.minIpe || 70, Math.floor(Math.random() * 15 + 75)),
       explanation: `AI-generated opportunity for ${extraAsset} based on market analysis.`,
       insights: ['Favorable market conditions', 'Technical setup confirmed', `R:R ratio ${extraRrRatio.toFixed(1)}:1`],

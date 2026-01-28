@@ -294,7 +294,8 @@ const useStore = create(
             aiModel: prompt.aiModel || 'gemini',
             minIpe: prompt.minIpe || 80,
             numResults: prompt.numResults || 3,
-            mode: prompt.mode || 'auto'
+            mode: prompt.mode || 'auto',
+            targetPct: prompt.targetPct || null // Profit target percentage
           },
           executionTime: prompt.executionTime,
           expiresAt: EXECUTION_LIMITS[prompt.executionTime]

@@ -413,6 +413,15 @@ export default function Incubator() {
                                   <span className="text-xs text-gray-400">Time</span>
                                   <span className="text-xs text-white ml-auto">{EXECUTION_LABELS[egg.config.executionTime] || egg.config.executionTime}</span>
                                 </div>
+                                {egg.config.targetPct && (
+                                  <div className="flex items-center gap-1.5 col-span-3 mt-1 pt-1 border-t border-quant-border">
+                                    <TrendingUp size={12} className="text-accent-cyan" />
+                                    <span className="text-xs text-gray-400">Profit Target</span>
+                                    <span className="text-xs font-mono text-accent-cyan font-bold ml-auto">
+                                      +{egg.config.targetPct}% ({egg.config.targetPct >= 100 ? `${(egg.config.targetPct / 100 + 1).toFixed(1)}x` : `$${((egg.config.capital * egg.config.targetPct) / 100).toFixed(0)}`})
+                                    </span>
+                                  </div>
+                                )}
                                 <div className="flex items-center gap-1.5">
                                   <Cpu size={12} className="text-accent-green" />
                                   <span className="text-xs text-gray-400">AI</span>
