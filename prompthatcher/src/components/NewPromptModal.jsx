@@ -1,25 +1,77 @@
-import { useState } from 'react'
+import { useState, useMemo } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { X, Sparkles, PenTool, Clock, DollarSign, TrendingUp, Cpu, Target, Hash, Crown, ArrowRight, BookOpen, ChevronRight } from 'lucide-react'
+import { X, Sparkles, PenTool, Clock, DollarSign, TrendingUp, Cpu, Target, Hash, Crown, ArrowRight, BookOpen, AlertTriangle, Zap } from 'lucide-react'
 import useStore from '../store/useStore'
 import TradeSelectionModal from './TradeSelectionModal'
 
 const executionTimes = [
-  { id: 'target', label: 'Target Based', desc: 'Until SL/TP hit' },
-  { id: 'scalping', label: 'Scalping', desc: '15min - 1h' },
-  { id: 'intraday', label: 'Intraday', desc: '4h - 24h' },
-  { id: 'swing', label: 'Swing', desc: '2 - 7 days' },
+  { id: 'target', label: 'Target', desc: 'Until TP/SL' },
+  { id: 'scalping', label: 'Scalp', desc: '15m-1h' },
+  { id: 'intraday', label: 'Intraday', desc: '4-24h' },
+  { id: 'swing', label: 'Swing', desc: '2-7d' },
 ]
 
 const aiModels = [
-  { id: 'gemini', label: 'Google Gemini', icon: '🔮' },
-  { id: 'openai', label: 'OpenAI GPT-4', icon: '🤖' },
-  { id: 'grok', label: 'xAI Grok', icon: '⚡' },
+  { id: 'gemini', label: 'Gemini', icon: '🔮' },
+  { id: 'openai', label: 'GPT-4', icon: '🤖' },
+  { id: 'grok', label: 'Grok', icon: '⚡' },
 ]
 
+// Target profit presets
+const targetPresets = [
+  { pct: 5, label: '5%' },
+  { pct: 10, label: '10%' },
+  { pct: 25, label: '25%' },
+  { pct: 50, label: '50%' },
+  { pct: 100, label: '2x' },
+]
+
+// Calculate estimated time and risk based on leverage and target
+const calculateEstimate = (targetPct, leverage) => {
+  // Crypto average daily volatility ~3-4%
+  const dailyVolatility = 3.5
+
+  // Effective movement needed (leverage amplifies returns)
+  const effectiveMovement = targetPct / leverage
+
+  // Estimated days to reach target
+  const estimatedDays = effectiveMovement / dailyVolatility
+
+  // Risk level based on leverage
+  let risk = 'low'
+  let riskColor = 'text-accent-green'
+  if (leverage >= 20) {
+    risk = 'extreme'
+    riskColor = 'text-accent-red'
+  } else if (leverage >= 10) {
+    risk = 'high'
+    riskColor = 'text-accent-orange'
+  } else if (leverage >= 5) {
+    risk = 'medium'
+    riskColor = 'text-accent-yellow'
+  }
+
+  // Format time
+  let timeStr = ''
+  if (estimatedDays < 0.04) { // < 1 hour
+    timeStr = `~${Math.round(estimatedDays * 24 * 60)}min`
+  } else if (estimatedDays < 1) {
+    timeStr = `~${Math.round(estimatedDays * 24)}h`
+  } else if (estimatedDays < 7) {
+    timeStr = `~${estimatedDays.toFixed(1)}d`
+  } else {
+    timeStr = `~${Math.round(estimatedDays / 7)}w`
+  }
+
+  // Liquidation risk (simplified: if price moves opposite by 100%/leverage, you're liquidated)
+  const liquidationMove = (100 / leverage).toFixed(1)
+
+  return { timeStr, risk, riskColor, liquidationMove, estimatedDays }
+}
+
 export default function NewPromptModal() {
-  const { setNewPromptModalOpen, addPrompt, generateTrades, settings, prompts } = useStore()
-  const [mode, setMode] = useState('library') // 'auto', 'library', 'manual'
+  const { setNewPromptModalOpen, addPrompt, generateTrades, prompts } = useStore()
+  const [mode, setMode] = useState('auto') // 'auto', 'library', 'manual'
   const [name, setName] = useState('')
   const [content, setContent] = useState('')
   const [executionTime, setExecutionTime] = useState('target')
@@ -28,6 +80,7 @@ export default function NewPromptModal() {
   const [aiModel, setAiModel] = useState('gemini')
   const [minIpe, setMinIpe] = useState(80)
   const [numResults, setNumResults] = useState(3)
+  const [targetPct, setTargetPct] = useState(10) // Target profit percentage
 
   // Selected prompt from library
   const [selectedPromptId, setSelectedPromptId] = useState(null)
@@ -39,9 +92,16 @@ export default function NewPromptModal() {
   // Get active prompts for library
   const savedPrompts = prompts.filter(p => p.status === 'active')
 
+  // Calculate estimate when in target mode
+  const estimate = useMemo(() => {
+    if (executionTime === 'target') {
+      return calculateEstimate(targetPct, leverage)
+    }
+    return null
+  }, [targetPct, leverage, executionTime])
+
   const handleSelectPrompt = (prompt) => {
     setSelectedPromptId(prompt.id)
-    // Pre-fill settings from the selected prompt
     setName(prompt.name)
     setExecutionTime(prompt.executionTime || 'target')
     setCapital(prompt.capital || 1000)
@@ -55,7 +115,6 @@ export default function NewPromptModal() {
     let promptToUse = null
 
     if (mode === 'library') {
-      // Use selected prompt from library
       const selectedPrompt = prompts.find(p => p.id === selectedPromptId)
       if (!selectedPrompt) return
 
@@ -66,14 +125,14 @@ export default function NewPromptModal() {
         leverage,
         aiModel,
         minIpe,
-        numResults
+        numResults,
+        targetPct: executionTime === 'target' ? targetPct : null
       }
     } else {
-      // Create new prompt (auto or manual)
       if (!name.trim()) return
 
       const promptContent = mode === 'auto'
-        ? `[AUTO-GENERATED from System Prompt]\n\nExecution Context:\n- Timeframe: ${executionTime}\n- Capital: $${capital}\n- Leverage: ${leverage}x\n- Min IPE: ${minIpe}%\n- Results: ${numResults}\n\nThis prompt inherits from the master System Prompt and will generate trading strategies following the scientific method.`
+        ? `[AUTO] ${executionTime.toUpperCase()} | $${capital} @ ${leverage}x | Target: ${targetPct}%`
         : content
 
       promptToUse = {
@@ -87,42 +146,34 @@ export default function NewPromptModal() {
         aiModel,
         minIpe,
         numResults,
+        targetPct: executionTime === 'target' ? targetPct : null,
         status: 'active',
         parentPrompt: mode === 'auto' ? 'system' : null,
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString()
       }
 
-      // Add prompt to store only for new prompts
       addPrompt(promptToUse)
     }
 
     setCurrentPrompt(promptToUse)
-
-    // Generate trades
     await generateTrades(promptToUse)
-
-    // Move to selection step
     setStep('selection')
   }
 
-  const handleTradeSelectionComplete = (egg) => {
-    // Close modal after egg is created
+  const handleTradeSelectionComplete = () => {
     setNewPromptModalOpen(false)
   }
 
   const handleTradeSelectionCancel = () => {
-    // Go back to config or close
     setStep('config')
   }
 
-  // Check if can submit
   const canSubmit = () => {
     if (mode === 'library') return selectedPromptId !== null
     return name.trim().length > 0
   }
 
-  // Show trade selection modal
   if (step === 'selection' && currentPrompt) {
     return (
       <TradeSelectionModal
@@ -146,340 +197,306 @@ export default function NewPromptModal() {
         animate={{ y: 0 }}
         exit={{ y: '100%' }}
         transition={{ type: 'spring', damping: 25, stiffness: 300 }}
-        className="w-full max-w-lg bg-quant-card rounded-t-3xl max-h-[90vh] flex flex-col"
+        className="w-full max-w-lg bg-quant-card rounded-t-3xl max-h-[85vh] flex flex-col"
         onClick={(e) => e.stopPropagation()}
       >
-        {/* Header */}
-        <div className="shrink-0 px-4 py-4 flex items-center justify-between">
-          <h2 className="text-lg font-bold text-white font-mono">New Incubation</h2>
+        {/* Header - Compact */}
+        <div className="shrink-0 px-4 py-3 flex items-center justify-between border-b border-quant-border">
+          <h2 className="text-base font-bold text-white">New Incubation</h2>
           <button
             onClick={() => setNewPromptModalOpen(false)}
-            className="p-2 rounded-full hover:bg-quant-surface transition-colors"
+            className="p-1.5 rounded-full hover:bg-quant-surface transition-colors"
           >
-            <X size={20} className="text-gray-400" />
+            <X size={18} className="text-gray-400" />
           </button>
         </div>
 
-        {/* Tab Navigation */}
-        <div className="shrink-0 px-4 pb-4">
-          <div className="flex bg-quant-surface rounded-xl p-1">
-            <button
-              onClick={() => setMode('auto')}
-              className={`flex-1 flex flex-col items-center py-3 px-2 rounded-lg transition-all ${
-                mode === 'auto' ? 'bg-quant-card' : ''
-              }`}
-            >
-              <Sparkles size={20} className={mode === 'auto' ? 'text-accent-cyan' : 'text-gray-500'} />
-              <span className={`text-xs mt-1 uppercase tracking-wider ${
-                mode === 'auto' ? 'text-accent-cyan' : 'text-gray-500'
-              }`}>
-                Auto
-              </span>
-            </button>
-            <button
-              onClick={() => setMode('library')}
-              className={`flex-1 flex flex-col items-center py-3 px-2 rounded-lg transition-all ${
-                mode === 'library' ? 'bg-quant-card' : ''
-              }`}
-            >
-              <BookOpen size={20} className={mode === 'library' ? 'text-accent-cyan' : 'text-gray-500'} />
-              <span className={`text-xs mt-1 uppercase tracking-wider ${
-                mode === 'library' ? 'text-accent-cyan' : 'text-gray-500'
-              }`}>
-                Library
-              </span>
-            </button>
-            <button
-              onClick={() => setMode('manual')}
-              className={`flex-1 flex flex-col items-center py-3 px-2 rounded-lg transition-all ${
-                mode === 'manual' ? 'bg-quant-card' : ''
-              }`}
-            >
-              <PenTool size={20} className={mode === 'manual' ? 'text-accent-cyan' : 'text-gray-500'} />
-              <span className={`text-xs mt-1 uppercase tracking-wider ${
-                mode === 'manual' ? 'text-accent-cyan' : 'text-gray-500'
-              }`}>
-                Manual
-              </span>
-            </button>
+        {/* Tab Navigation - Compact */}
+        <div className="shrink-0 px-4 py-2">
+          <div className="flex bg-quant-surface rounded-lg p-0.5">
+            {[
+              { id: 'auto', icon: Sparkles, label: 'Auto' },
+              { id: 'library', icon: BookOpen, label: 'Library' },
+              { id: 'manual', icon: PenTool, label: 'Manual' }
+            ].map(tab => (
+              <button
+                key={tab.id}
+                onClick={() => setMode(tab.id)}
+                className={`flex-1 flex items-center justify-center gap-1.5 py-2 rounded-md transition-all ${
+                  mode === tab.id ? 'bg-quant-card text-accent-cyan' : 'text-gray-500'
+                }`}
+              >
+                <tab.icon size={14} />
+                <span className="text-xs font-medium">{tab.label}</span>
+              </button>
+            ))}
           </div>
         </div>
 
         {/* Content */}
-        <div className="flex-1 overflow-y-auto hide-scrollbar p-4 space-y-6">
+        <div className="flex-1 overflow-y-auto hide-scrollbar px-4 py-3 space-y-4">
 
-          {/* LIBRARY MODE */}
-          {mode === 'library' && (
-            <>
-              <div>
-                <label className="text-xs text-gray-400 uppercase tracking-wider mb-3 block">
-                  Saved Prompts
-                </label>
-                <div className="space-y-3">
-                  {savedPrompts.length === 0 ? (
-                    <div className="text-center py-8 text-gray-500">
-                      <BookOpen size={32} className="mx-auto mb-2 opacity-50" />
-                      <p className="text-sm">No saved prompts yet</p>
-                      <p className="text-xs mt-1">Create one using Auto or Manual mode</p>
-                    </div>
-                  ) : (
-                    savedPrompts.map((prompt) => (
-                      <button
-                        key={prompt.id}
-                        onClick={() => handleSelectPrompt(prompt)}
-                        className={`w-full p-4 rounded-xl border-2 text-left transition-all ${
-                          selectedPromptId === prompt.id
-                            ? 'border-accent-cyan bg-accent-cyan/10'
-                            : 'border-quant-border bg-quant-surface hover:border-gray-600'
-                        }`}
-                      >
-                        <div className="flex items-center justify-between">
-                          <div>
-                            <h3 className={`font-medium font-mono ${
-                              selectedPromptId === prompt.id ? 'text-white' : 'text-gray-300'
-                            }`}>
-                              {prompt.name}
-                            </h3>
-                            <p className="text-xs text-gray-500 uppercase mt-1">
-                              {prompt.executionTime?.replace('_', ' ') || 'TARGET_BASED'}
-                            </p>
-                          </div>
-                          {selectedPromptId === prompt.id && (
-                            <div className="w-3 h-3 rounded-full bg-accent-cyan" />
-                          )}
-                        </div>
-                      </button>
-                    ))
-                  )}
-                </div>
-              </div>
-
-              {/* Show config options when prompt is selected */}
-              {selectedPromptId && (
-                <>
-                  {/* Execution Time */}
-                  <div>
-                    <label className="text-xs text-gray-400 uppercase tracking-wider mb-2 flex items-center gap-2">
-                      <Clock size={14} />
-                      Execution Time
-                    </label>
-                    <div className="grid grid-cols-2 gap-2">
-                      {executionTimes.map((time) => (
-                        <button
-                          key={time.id}
-                          onClick={() => setExecutionTime(time.id)}
-                          className={`p-3 rounded-xl border text-left transition-all ${
-                            executionTime === time.id
-                              ? 'border-accent-cyan bg-accent-cyan/10'
-                              : 'border-quant-border bg-quant-surface'
-                          }`}
-                        >
-                          <span className={`block text-sm font-medium ${
-                            executionTime === time.id ? 'text-white' : 'text-gray-400'
-                          }`}>
-                            {time.label}
-                          </span>
-                          <span className="text-xs text-gray-500">{time.desc}</span>
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-
-                  {/* Capital & Leverage */}
-                  <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <label className="text-xs text-gray-400 uppercase tracking-wider mb-2 flex items-center gap-2">
-                        <DollarSign size={14} />
-                        Capital
-                      </label>
-                      <div className="relative">
-                        <span className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500">$</span>
-                        <input
-                          type="number"
-                          value={capital}
-                          onChange={(e) => setCapital(Number(e.target.value))}
-                          className="w-full bg-quant-surface border border-quant-border rounded-xl pl-8 pr-4 py-3 text-white font-mono"
-                        />
-                      </div>
-                    </div>
-                    <div>
-                      <label className="text-xs text-gray-400 uppercase tracking-wider mb-2 flex items-center gap-2">
-                        <TrendingUp size={14} />
-                        Leverage
-                      </label>
-                      <div className="relative">
-                        <input
-                          type="number"
-                          value={leverage}
-                          onChange={(e) => setLeverage(Number(e.target.value))}
-                          min={1}
-                          max={100}
-                          className="w-full bg-quant-surface border border-quant-border rounded-xl px-4 py-3 text-white font-mono"
-                        />
-                        <span className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-500">x</span>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Number of Results */}
-                  <div>
-                    <label className="text-xs text-gray-400 uppercase tracking-wider mb-2 flex items-center gap-2">
-                      <Hash size={14} />
-                      Number of Results
-                    </label>
-                    <div className="flex gap-2">
-                      {[1, 3, 5, 10].map((num) => (
-                        <button
-                          key={num}
-                          onClick={() => setNumResults(num)}
-                          className={`flex-1 py-3 rounded-xl border font-mono transition-all ${
-                            numResults === num
-                              ? 'border-accent-cyan bg-accent-cyan/10 text-white'
-                              : 'border-quant-border bg-quant-surface text-gray-400'
-                          }`}
-                        >
-                          {num}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                </>
-              )}
-            </>
+          {/* AUTO MODE - Compact info */}
+          {mode === 'auto' && (
+            <div className="p-3 bg-accent-cyan/10 border border-accent-cyan/20 rounded-xl flex items-center gap-2">
+              <Crown size={16} className="text-accent-cyan shrink-0" />
+              <p className="text-xs text-accent-cyan">
+                AI generates unique strategies using scientific method
+              </p>
+            </div>
           )}
 
-          {/* AUTO MODE */}
-          {mode === 'auto' && (
-            <>
-              {/* Auto mode info */}
-              <div className="p-4 bg-accent-cyan/10 border border-accent-cyan/20 rounded-xl flex items-start gap-3">
-                <Crown size={20} className="text-accent-cyan shrink-0 mt-0.5" />
-                <div>
-                  <p className="text-sm text-accent-cyan font-medium">
-                    Automatic Generation
-                  </p>
-                  <p className="text-xs text-gray-400 mt-1">
-                    The AI will create a unique trading strategy using the System Prompt template and scientific method.
-                  </p>
+          {/* LIBRARY MODE - Prompt selector */}
+          {mode === 'library' && (
+            <div className="space-y-2">
+              {savedPrompts.length === 0 ? (
+                <div className="text-center py-6 text-gray-500">
+                  <BookOpen size={24} className="mx-auto mb-2 opacity-50" />
+                  <p className="text-xs">No saved prompts. Use Auto or Manual first.</p>
                 </div>
-              </div>
+              ) : (
+                savedPrompts.map((prompt) => (
+                  <button
+                    key={prompt.id}
+                    onClick={() => handleSelectPrompt(prompt)}
+                    className={`w-full p-3 rounded-xl border text-left transition-all ${
+                      selectedPromptId === prompt.id
+                        ? 'border-accent-cyan bg-accent-cyan/10'
+                        : 'border-quant-border bg-quant-surface'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between">
+                      <span className={`font-medium text-sm ${
+                        selectedPromptId === prompt.id ? 'text-white' : 'text-gray-300'
+                      }`}>
+                        {prompt.name}
+                      </span>
+                      {selectedPromptId === prompt.id && (
+                        <div className="w-2 h-2 rounded-full bg-accent-cyan" />
+                      )}
+                    </div>
+                  </button>
+                ))
+              )}
+            </div>
+          )}
 
-              {/* Name */}
-              <div>
-                <label className="text-xs text-gray-400 uppercase tracking-wider mb-2 block">Prompt Name</label>
-                <input
-                  type="text"
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                  placeholder="e.g., Alpha Momentum Strategy"
-                  className="w-full bg-quant-surface border border-quant-border rounded-xl px-4 py-3 text-white placeholder-gray-500 focus:border-accent-cyan transition-colors"
-                />
-              </div>
+          {/* Common form fields - only show if not library OR library with selection */}
+          {(mode !== 'library' || selectedPromptId) && (
+            <>
+              {/* Name field - only for auto/manual */}
+              {mode !== 'library' && (
+                <div>
+                  <label className="text-[10px] text-gray-500 uppercase tracking-wider mb-1 block">Name</label>
+                  <input
+                    type="text"
+                    value={name}
+                    onChange={(e) => setName(e.target.value)}
+                    placeholder="Strategy name..."
+                    className="w-full bg-quant-surface border border-quant-border rounded-lg px-3 py-2 text-sm text-white placeholder-gray-500"
+                  />
+                </div>
+              )}
 
-              {/* Execution Time */}
+              {/* Manual content */}
+              {mode === 'manual' && (
+                <div>
+                  <label className="text-[10px] text-gray-500 uppercase tracking-wider mb-1 block">Strategy</label>
+                  <textarea
+                    value={content}
+                    onChange={(e) => setContent(e.target.value)}
+                    placeholder="Describe your trading strategy..."
+                    rows={3}
+                    className="w-full bg-quant-surface border border-quant-border rounded-lg px-3 py-2 text-sm text-white placeholder-gray-500 resize-none"
+                  />
+                </div>
+              )}
+
+              {/* Execution Time - Horizontal compact */}
               <div>
-                <label className="text-xs text-gray-400 uppercase tracking-wider mb-2 flex items-center gap-2">
-                  <Clock size={14} />
-                  Execution Time
+                <label className="text-[10px] text-gray-500 uppercase tracking-wider mb-1.5 flex items-center gap-1">
+                  <Clock size={10} /> Execution
                 </label>
-                <div className="grid grid-cols-2 gap-2">
+                <div className="flex gap-1.5">
                   {executionTimes.map((time) => (
                     <button
                       key={time.id}
                       onClick={() => setExecutionTime(time.id)}
-                      className={`p-3 rounded-xl border text-left transition-all ${
+                      className={`flex-1 py-2 px-1 rounded-lg border text-center transition-all ${
                         executionTime === time.id
-                          ? 'border-accent-cyan bg-accent-cyan/10'
-                          : 'border-quant-border bg-quant-surface'
+                          ? 'border-accent-cyan bg-accent-cyan/10 text-white'
+                          : 'border-quant-border bg-quant-surface text-gray-500'
                       }`}
                     >
-                      <span className={`block text-sm font-medium ${
-                        executionTime === time.id ? 'text-white' : 'text-gray-400'
-                      }`}>
-                        {time.label}
-                      </span>
-                      <span className="text-xs text-gray-500">{time.desc}</span>
+                      <span className="block text-xs font-medium">{time.label}</span>
+                      <span className="text-[9px] opacity-60">{time.desc}</span>
                     </button>
                   ))}
                 </div>
               </div>
 
-              {/* Capital & Leverage */}
-              <div className="grid grid-cols-2 gap-4">
+              {/* TARGET MODE - Profit target selector with time estimate */}
+              {executionTime === 'target' && (
+                <div className="bg-quant-surface rounded-xl p-3 border border-quant-border">
+                  <div className="flex items-center justify-between mb-2">
+                    <label className="text-[10px] text-gray-500 uppercase tracking-wider flex items-center gap-1">
+                      <Target size={10} /> Profit Target
+                    </label>
+                    <span className="text-accent-cyan font-mono font-bold text-sm">+{targetPct}%</span>
+                  </div>
+
+                  {/* Target presets */}
+                  <div className="flex gap-1.5 mb-3">
+                    {targetPresets.map((preset) => (
+                      <button
+                        key={preset.pct}
+                        onClick={() => setTargetPct(preset.pct)}
+                        className={`flex-1 py-1.5 rounded-lg text-xs font-mono transition-all ${
+                          targetPct === preset.pct
+                            ? 'bg-accent-cyan/20 text-accent-cyan border border-accent-cyan/30'
+                            : 'bg-quant-card text-gray-400 border border-transparent'
+                        }`}
+                      >
+                        {preset.label}
+                      </button>
+                    ))}
+                  </div>
+
+                  {/* Slider for fine-tuning */}
+                  <input
+                    type="range"
+                    min={1}
+                    max={200}
+                    value={targetPct}
+                    onChange={(e) => setTargetPct(Number(e.target.value))}
+                    className="w-full h-1 mb-3"
+                  />
+
+                  {/* Time & Risk estimate */}
+                  {estimate && (
+                    <div className="grid grid-cols-3 gap-2 text-center">
+                      <div className="bg-quant-card rounded-lg p-2">
+                        <span className="text-[9px] text-gray-500 block">Est. Time</span>
+                        <span className="text-xs font-mono text-white">{estimate.timeStr}</span>
+                      </div>
+                      <div className="bg-quant-card rounded-lg p-2">
+                        <span className="text-[9px] text-gray-500 block">Risk</span>
+                        <span className={`text-xs font-mono capitalize ${estimate.riskColor}`}>
+                          {estimate.risk}
+                        </span>
+                      </div>
+                      <div className="bg-quant-card rounded-lg p-2">
+                        <span className="text-[9px] text-gray-500 block">Liq. at</span>
+                        <span className="text-xs font-mono text-accent-red">-{estimate.liquidationMove}%</span>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Risk warning for high leverage */}
+                  {estimate && estimate.risk !== 'low' && (
+                    <div className={`flex items-center gap-1.5 mt-2 p-2 rounded-lg text-[10px] ${
+                      estimate.risk === 'extreme' ? 'bg-accent-red/10 text-accent-red' : 'bg-accent-orange/10 text-accent-orange'
+                    }`}>
+                      <AlertTriangle size={12} />
+                      {estimate.risk === 'extreme'
+                        ? `Extreme risk: ${leverage}x leverage can liquidate with ${estimate.liquidationMove}% move`
+                        : `Higher leverage = faster target but increased liquidation risk`
+                      }
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Capital & Leverage - Inline compact */}
+              <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="text-xs text-gray-400 uppercase tracking-wider mb-2 flex items-center gap-2">
-                    <DollarSign size={14} />
-                    Capital
+                  <label className="text-[10px] text-gray-500 uppercase tracking-wider mb-1 flex items-center gap-1">
+                    <DollarSign size={10} /> Capital
                   </label>
                   <div className="relative">
-                    <span className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500">$</span>
+                    <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-500 text-xs">$</span>
                     <input
                       type="number"
                       value={capital}
                       onChange={(e) => setCapital(Number(e.target.value))}
-                      className="w-full bg-quant-surface border border-quant-border rounded-xl pl-8 pr-4 py-3 text-white font-mono"
+                      className="w-full bg-quant-surface border border-quant-border rounded-lg pl-6 pr-2 py-2 text-sm text-white font-mono"
                     />
                   </div>
                 </div>
                 <div>
-                  <label className="text-xs text-gray-400 uppercase tracking-wider mb-2 flex items-center gap-2">
-                    <TrendingUp size={14} />
-                    Leverage
+                  <label className="text-[10px] text-gray-500 uppercase tracking-wider mb-1 flex items-center gap-1">
+                    <Zap size={10} /> Leverage
                   </label>
                   <div className="relative">
                     <input
                       type="number"
                       value={leverage}
-                      onChange={(e) => setLeverage(Number(e.target.value))}
+                      onChange={(e) => setLeverage(Math.max(1, Math.min(125, Number(e.target.value))))}
                       min={1}
-                      max={100}
-                      className="w-full bg-quant-surface border border-quant-border rounded-xl px-4 py-3 text-white font-mono"
+                      max={125}
+                      className="w-full bg-quant-surface border border-quant-border rounded-lg px-2 py-2 text-sm text-white font-mono"
                     />
-                    <span className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-500">x</span>
+                    <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-500 text-xs">x</span>
                   </div>
                 </div>
               </div>
 
-              {/* AI Model */}
-              <div>
-                <label className="text-xs text-gray-400 uppercase tracking-wider mb-2 flex items-center gap-2">
-                  <Cpu size={14} />
-                  AI Model
-                </label>
-                <div className="space-y-2">
-                  {aiModels.map((model) => (
-                    <button
-                      key={model.id}
-                      onClick={() => setAiModel(model.id)}
-                      className={`w-full p-3 rounded-xl border flex items-center gap-3 transition-all ${
-                        aiModel === model.id
-                          ? 'border-accent-cyan bg-accent-cyan/10'
-                          : 'border-quant-border bg-quant-surface'
-                      }`}
-                    >
-                      <span className="text-xl">{model.icon}</span>
-                      <span className={aiModel === model.id ? 'text-white' : 'text-gray-400'}>
-                        {model.label}
-                      </span>
-                      {aiModel === model.id && (
-                        <div className="ml-auto w-2 h-2 rounded-full bg-accent-cyan" />
-                      )}
-                    </button>
-                  ))}
+              {/* AI Model & Results - Compact row */}
+              <div className="grid grid-cols-2 gap-3">
+                {/* AI Model dropdown-style */}
+                <div>
+                  <label className="text-[10px] text-gray-500 uppercase tracking-wider mb-1 flex items-center gap-1">
+                    <Cpu size={10} /> AI Model
+                  </label>
+                  <div className="flex gap-1">
+                    {aiModels.map((model) => (
+                      <button
+                        key={model.id}
+                        onClick={() => setAiModel(model.id)}
+                        className={`flex-1 py-2 rounded-lg border text-center transition-all ${
+                          aiModel === model.id
+                            ? 'border-accent-cyan bg-accent-cyan/10'
+                            : 'border-quant-border bg-quant-surface'
+                        }`}
+                        title={model.label}
+                      >
+                        <span className="text-sm">{model.icon}</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Number of Results */}
+                <div>
+                  <label className="text-[10px] text-gray-500 uppercase tracking-wider mb-1 flex items-center gap-1">
+                    <Hash size={10} /> Results
+                  </label>
+                  <div className="flex gap-1">
+                    {[1, 3, 5].map((num) => (
+                      <button
+                        key={num}
+                        onClick={() => setNumResults(num)}
+                        className={`flex-1 py-2 rounded-lg border font-mono text-xs transition-all ${
+                          numResults === num
+                            ? 'border-accent-cyan bg-accent-cyan/10 text-white'
+                            : 'border-quant-border bg-quant-surface text-gray-500'
+                        }`}
+                      >
+                        {num}
+                      </button>
+                    ))}
+                  </div>
                 </div>
               </div>
 
-              {/* Min IPE Slider */}
-              <div>
-                <label className="text-xs text-gray-400 uppercase tracking-wider mb-2 flex items-center gap-2">
-                  <Target size={14} />
-                  Minimum IPE (Success Probability)
-                </label>
-                <div className="bg-quant-surface rounded-xl p-4 border border-quant-border">
-                  <div className="flex justify-between mb-2">
-                    <span className="text-gray-500">Min</span>
-                    <span className="text-accent-cyan font-mono font-bold">{minIpe}%</span>
-                    <span className="text-gray-500">Max</span>
+              {/* Min IPE - Compact slider */}
+              {mode === 'auto' && (
+                <div>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="text-[10px] text-gray-500 uppercase tracking-wider flex items-center gap-1">
+                      <Target size={10} /> Min IPE
+                    </label>
+                    <span className="text-accent-cyan font-mono text-xs">{minIpe}%</span>
                   </div>
                   <input
                     type="range"
@@ -487,196 +504,27 @@ export default function NewPromptModal() {
                     max={95}
                     value={minIpe}
                     onChange={(e) => setMinIpe(Number(e.target.value))}
-                    className="w-full"
+                    className="w-full h-1"
                   />
                 </div>
-              </div>
-
-              {/* Number of Results */}
-              <div>
-                <label className="text-xs text-gray-400 uppercase tracking-wider mb-2 flex items-center gap-2">
-                  <Hash size={14} />
-                  Number of Results
-                </label>
-                <div className="flex gap-2">
-                  {[1, 3, 5, 10].map((num) => (
-                    <button
-                      key={num}
-                      onClick={() => setNumResults(num)}
-                      className={`flex-1 py-3 rounded-xl border font-mono transition-all ${
-                        numResults === num
-                          ? 'border-accent-cyan bg-accent-cyan/10 text-white'
-                          : 'border-quant-border bg-quant-surface text-gray-400'
-                      }`}
-                    >
-                      {num}
-                    </button>
-                  ))}
-                </div>
-              </div>
+              )}
             </>
           )}
-
-          {/* MANUAL MODE */}
-          {mode === 'manual' && (
-            <>
-              {/* Name */}
-              <div>
-                <label className="text-xs text-gray-400 uppercase tracking-wider mb-2 block">Prompt Name</label>
-                <input
-                  type="text"
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                  placeholder="e.g., My Custom Strategy"
-                  className="w-full bg-quant-surface border border-quant-border rounded-xl px-4 py-3 text-white placeholder-gray-500 focus:border-accent-cyan transition-colors"
-                />
-              </div>
-
-              {/* Manual Content */}
-              <div>
-                <label className="text-xs text-gray-400 uppercase tracking-wider mb-2 block">Strategy Description</label>
-                <textarea
-                  value={content}
-                  onChange={(e) => setContent(e.target.value)}
-                  placeholder="Describe your trading strategy in detail..."
-                  rows={6}
-                  className="w-full bg-quant-surface border border-quant-border rounded-xl px-4 py-3 text-white placeholder-gray-500 focus:border-accent-cyan transition-colors resize-none font-mono text-sm"
-                />
-              </div>
-
-              {/* Execution Time */}
-              <div>
-                <label className="text-xs text-gray-400 uppercase tracking-wider mb-2 flex items-center gap-2">
-                  <Clock size={14} />
-                  Execution Time
-                </label>
-                <div className="grid grid-cols-2 gap-2">
-                  {executionTimes.map((time) => (
-                    <button
-                      key={time.id}
-                      onClick={() => setExecutionTime(time.id)}
-                      className={`p-3 rounded-xl border text-left transition-all ${
-                        executionTime === time.id
-                          ? 'border-accent-cyan bg-accent-cyan/10'
-                          : 'border-quant-border bg-quant-surface'
-                      }`}
-                    >
-                      <span className={`block text-sm font-medium ${
-                        executionTime === time.id ? 'text-white' : 'text-gray-400'
-                      }`}>
-                        {time.label}
-                      </span>
-                      <span className="text-xs text-gray-500">{time.desc}</span>
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              {/* Capital & Leverage */}
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="text-xs text-gray-400 uppercase tracking-wider mb-2 flex items-center gap-2">
-                    <DollarSign size={14} />
-                    Capital
-                  </label>
-                  <div className="relative">
-                    <span className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500">$</span>
-                    <input
-                      type="number"
-                      value={capital}
-                      onChange={(e) => setCapital(Number(e.target.value))}
-                      className="w-full bg-quant-surface border border-quant-border rounded-xl pl-8 pr-4 py-3 text-white font-mono"
-                    />
-                  </div>
-                </div>
-                <div>
-                  <label className="text-xs text-gray-400 uppercase tracking-wider mb-2 flex items-center gap-2">
-                    <TrendingUp size={14} />
-                    Leverage
-                  </label>
-                  <div className="relative">
-                    <input
-                      type="number"
-                      value={leverage}
-                      onChange={(e) => setLeverage(Number(e.target.value))}
-                      min={1}
-                      max={100}
-                      className="w-full bg-quant-surface border border-quant-border rounded-xl px-4 py-3 text-white font-mono"
-                    />
-                    <span className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-500">x</span>
-                  </div>
-                </div>
-              </div>
-
-              {/* AI Model */}
-              <div>
-                <label className="text-xs text-gray-400 uppercase tracking-wider mb-2 flex items-center gap-2">
-                  <Cpu size={14} />
-                  AI Model
-                </label>
-                <div className="space-y-2">
-                  {aiModels.map((model) => (
-                    <button
-                      key={model.id}
-                      onClick={() => setAiModel(model.id)}
-                      className={`w-full p-3 rounded-xl border flex items-center gap-3 transition-all ${
-                        aiModel === model.id
-                          ? 'border-accent-cyan bg-accent-cyan/10'
-                          : 'border-quant-border bg-quant-surface'
-                      }`}
-                    >
-                      <span className="text-xl">{model.icon}</span>
-                      <span className={aiModel === model.id ? 'text-white' : 'text-gray-400'}>
-                        {model.label}
-                      </span>
-                      {aiModel === model.id && (
-                        <div className="ml-auto w-2 h-2 rounded-full bg-accent-cyan" />
-                      )}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              {/* Number of Results */}
-              <div>
-                <label className="text-xs text-gray-400 uppercase tracking-wider mb-2 flex items-center gap-2">
-                  <Hash size={14} />
-                  Number of Results
-                </label>
-                <div className="flex gap-2">
-                  {[1, 3, 5, 10].map((num) => (
-                    <button
-                      key={num}
-                      onClick={() => setNumResults(num)}
-                      className={`flex-1 py-3 rounded-xl border font-mono transition-all ${
-                        numResults === num
-                          ? 'border-accent-cyan bg-accent-cyan/10 text-white'
-                          : 'border-quant-border bg-quant-surface text-gray-400'
-                      }`}
-                    >
-                      {num}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            </>
-          )}
-
         </div>
 
-        {/* Submit Button - Fixed at bottom */}
-        <div className="shrink-0 p-4 border-t border-quant-border bg-quant-card">
+        {/* Submit Button */}
+        <div className="shrink-0 p-4 border-t border-quant-border">
           <motion.button
             onClick={handleSubmit}
             disabled={!canSubmit()}
             whileTap={{ scale: 0.98 }}
-            className="w-full py-4 rounded-xl bg-gradient-to-r from-accent-cyan to-electric-600 text-quant-bg font-bold text-lg disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+            className="w-full py-3.5 rounded-xl bg-gradient-to-r from-accent-cyan to-electric-600 text-quant-bg font-bold disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
             style={{
-              boxShadow: canSubmit() ? '0 0 30px rgba(0, 240, 255, 0.3)' : 'none'
+              boxShadow: canSubmit() ? '0 0 20px rgba(0, 240, 255, 0.25)' : 'none'
             }}
           >
             Generate Trades
-            <ArrowRight size={20} />
+            <ArrowRight size={18} />
           </motion.button>
         </div>
       </motion.div>
