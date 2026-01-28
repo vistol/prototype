@@ -108,7 +108,7 @@ export default function Incubator() {
     return signal.strategy === 'LONG' ? delta > -0.5 : delta < 0.5
   }
 
-  // Calculate results for an egg (used for both hatched and expired)
+  // Calculate results for an egg (pnl is now percentage)
   const calculateEggResults = (egg) => {
     const eggSignals = signals.filter(s => egg.trades.includes(s.id))
     const closedSignals = eggSignals.filter(s => s.status === 'closed')
@@ -118,6 +118,7 @@ export default function Incubator() {
         totalTrades: eggSignals.length,
         closedTrades: 0,
         wins: 0,
+        losses: 0,
         winRate: 0,
         totalPnl: 0,
         profitFactor: 0
@@ -125,7 +126,13 @@ export default function Incubator() {
     }
 
     const wins = closedSignals.filter(s => s.result === 'win').length
-    const totalPnl = closedSignals.reduce((sum, s) => sum + (s.pnl || 0), 0)
+    const losses = closedSignals.length - wins
+
+    // pnl is now percentage - calculate average
+    const totalPnlPercent = closedSignals.reduce((sum, s) => sum + (s.pnl || 0), 0)
+    const avgPnl = totalPnlPercent / closedSignals.length
+
+    // Profit factor using percentage
     const grossProfit = closedSignals.filter(s => (s.pnl || 0) > 0).reduce((sum, s) => sum + s.pnl, 0)
     const grossLoss = Math.abs(closedSignals.filter(s => (s.pnl || 0) < 0).reduce((sum, s) => sum + s.pnl, 0))
 
@@ -133,8 +140,9 @@ export default function Incubator() {
       totalTrades: eggSignals.length,
       closedTrades: closedSignals.length,
       wins,
-      winRate: Math.round((wins / closedSignals.length) * 100),
-      totalPnl,
+      losses,
+      winRate: closedSignals.length > 0 ? Math.round((wins / closedSignals.length) * 100) : 0,
+      totalPnl: avgPnl, // Average PnL percentage
       profitFactor: grossLoss > 0 ? grossProfit / grossLoss : (grossProfit > 0 ? Infinity : 0)
     }
   }

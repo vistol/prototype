@@ -29,7 +29,7 @@ export default function Hatchlings() {
   // Check if egg is expired
   const isEggExpired = (egg) => egg.expiresAt && new Date(egg.expiresAt) <= new Date()
 
-  // Calculate results for an egg
+  // Calculate results for an egg (pnl is now percentage)
   const calculateEggResults = (egg) => {
     const eggSignals = signals.filter(s => egg.trades.includes(s.id))
     const closedSignals = eggSignals.filter(s => s.status === 'closed')
@@ -43,16 +43,22 @@ export default function Hatchlings() {
         winRate: 0,
         totalPnl: 0,
         profitFactor: 0,
-        avgIpe: 0,
+        avgIpe: eggSignals.length > 0 ? Math.round(eggSignals.reduce((sum, s) => sum + (s.ipe || 0), 0) / eggSignals.length) : 0,
         maxDrawdown: 0
       }
     }
 
     const wins = closedSignals.filter(s => s.result === 'win').length
     const losses = closedSignals.length - wins
-    const totalPnl = closedSignals.reduce((sum, s) => sum + (s.pnl || 0), 0)
+
+    // pnl is now percentage - calculate average
+    const totalPnlPercent = closedSignals.reduce((sum, s) => sum + (s.pnl || 0), 0)
+    const avgPnl = totalPnlPercent / closedSignals.length
+
+    // Profit factor using percentage
     const grossProfit = closedSignals.filter(s => (s.pnl || 0) > 0).reduce((sum, s) => sum + s.pnl, 0)
     const grossLoss = Math.abs(closedSignals.filter(s => (s.pnl || 0) < 0).reduce((sum, s) => sum + s.pnl, 0))
+
     const avgIpe = eggSignals.reduce((sum, s) => sum + (s.ipe || 0), 0) / eggSignals.length
 
     return {
@@ -60,8 +66,8 @@ export default function Hatchlings() {
       closedTrades: closedSignals.length,
       wins,
       losses,
-      winRate: Math.round((wins / closedSignals.length) * 100),
-      totalPnl,
+      winRate: closedSignals.length > 0 ? Math.round((wins / closedSignals.length) * 100) : 0,
+      totalPnl: avgPnl, // Average PnL percentage
       profitFactor: grossLoss > 0 ? grossProfit / grossLoss : (grossProfit > 0 ? Infinity : 0),
       avgIpe: Math.round(avgIpe),
       maxDrawdown: 0

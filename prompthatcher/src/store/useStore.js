@@ -349,19 +349,32 @@ const useStore = create(
           // Calculate results
           const wins = eggSignals.filter(s => s.result === 'win').length
           const losses = eggSignals.filter(s => s.result === 'loss').length
-          const totalPnl = eggSignals.reduce((sum, s) => sum + (s.pnl || 0), 0)
+
+          // pnl is now percentage, calculate average PnL%
+          const totalPnlPercent = eggSignals.reduce((sum, s) => sum + (s.pnl || 0), 0)
+          const avgPnl = eggSignals.length > 0 ? totalPnlPercent / eggSignals.length : 0
           const winRate = eggSignals.length > 0 ? (wins / eggSignals.length) * 100 : 0
+
+          // Calculate dollar PnL for logging
+          const totalPnlDollar = eggSignals.reduce((sum, s) => sum + (s.pnlDollar || 0), 0)
+
+          // Profit factor using percentage PnL
+          const grossProfit = eggSignals.filter(s => (s.pnl || 0) > 0).reduce((sum, s) => sum + s.pnl, 0)
+          const grossLoss = Math.abs(eggSignals.filter(s => (s.pnl || 0) < 0).reduce((sum, s) => sum + s.pnl, 0))
+
+          // Calculate avg IPE
+          const avgIpe = eggSignals.reduce((sum, s) => sum + (s.ipe || 0), 0) / eggSignals.length
 
           const results = {
             totalTrades: eggSignals.length,
+            closedTrades: eggSignals.length,
             wins,
             losses,
             winRate: Math.round(winRate),
-            totalPnl,
-            profitFactor: losses > 0
-              ? Math.abs(eggSignals.filter(s => s.result === 'win').reduce((sum, s) => sum + (s.pnl || 0), 0)) /
-                Math.abs(eggSignals.filter(s => s.result === 'loss').reduce((sum, s) => sum + (s.pnl || 0), 0))
-              : wins > 0 ? Infinity : 0
+            totalPnl: avgPnl, // Average PnL percentage
+            totalPnlDollar, // Total dollar PnL for reference
+            profitFactor: grossLoss > 0 ? grossProfit / grossLoss : (grossProfit > 0 ? Infinity : 0),
+            avgIpe: Math.round(avgIpe)
           }
 
           set((state) => ({
@@ -376,7 +389,7 @@ const useStore = create(
           }))
 
           // Log egg hatching
-          const pnlStr = totalPnl >= 0 ? `+$${totalPnl.toFixed(2)}` : `-$${Math.abs(totalPnl).toFixed(2)}`
+          const pnlStr = avgPnl >= 0 ? `+${avgPnl.toFixed(2)}%` : `${avgPnl.toFixed(2)}%`
           get().addLog('egg', `Egg hatched: "${egg.promptName}" - ${wins}W/${losses}L (${pnlStr})`, {
             eggId,
             promptName: egg.promptName,
@@ -728,13 +741,14 @@ If no truly new strategy can be generated, you must invent a new angle rather th
             signalsUpdated = true
             const egg = eggs.find(e => e.trades.includes(signal.id))
             const capital = egg ? (egg.totalCapital / egg.trades.length) : 100
-            const pnl = (tradeStatus.pnlPercent / 100) * capital
+            const pnlDollar = (tradeStatus.pnlPercent / 100) * capital
 
             closedTrades.push({
               asset: signal.asset,
               strategy: signal.strategy,
               result: tradeStatus.status,
-              pnl,
+              pnl: tradeStatus.pnlPercent, // percentage for display
+              pnlDollar,
               exitPrice: tradeStatus.exitPrice,
               eggName: egg?.promptName
             })
@@ -744,7 +758,8 @@ If no truly new strategy can be generated, you must invent a new angle rather th
               status: 'closed',
               result: tradeStatus.status,
               exitPrice: tradeStatus.exitPrice,
-              pnl,
+              pnl: tradeStatus.pnlPercent, // Store percentage
+              pnlDollar, // Store dollar amount
               closedAt: new Date().toISOString()
             }
           }
