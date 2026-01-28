@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { Cpu, FileText, Database, ChevronRight, Eye, EyeOff, Check, X, AlertCircle, Edit3, Plus, Crown, ChevronDown, ChevronUp, Cloud, RefreshCw, Download, Upload, Activity, TrendingUp, Trash2, Link, Unlink, Info, Egg, BarChart3, ScrollText } from 'lucide-react'
 import useStore from '../store/useStore'
 import Header from '../components/Header'
+import PromptEditorModal from '../components/PromptEditorModal'
 
 const tabs = ['AI Provider', 'Prompts', 'System']
 
@@ -58,7 +59,6 @@ export default function Settings() {
     updatePrompt,
     updateSystemPrompt,
     addPrompt,
-    setNewPromptModalOpen,
     syncToCloud,
     loadFromCloud,
     syncStatus,
@@ -73,8 +73,6 @@ export default function Settings() {
 
   const [activeTab, setActiveTab] = useState(0)
   const [showApiKey, setShowApiKey] = useState({})
-  const [editingPrompt, setEditingPrompt] = useState(null)
-  const [editContent, setEditContent] = useState('')
   const [testingConnection, setTestingConnection] = useState(false)
   const [connectionResult, setConnectionResult] = useState(null)
   const [editingSystemPrompt, setEditingSystemPrompt] = useState(false)
@@ -93,6 +91,8 @@ export default function Settings() {
   })
   const [deleteResult, setDeleteResult] = useState(null)
   const [isResetting, setIsResetting] = useState(false)
+  const [showPromptEditor, setShowPromptEditor] = useState(false)
+  const [editingPromptData, setEditingPromptData] = useState(null)
 
   // Get current data counts
   const dataCounts = getDataCounts()
@@ -178,10 +178,6 @@ export default function Settings() {
     setEditingSystemPrompt(false)
   }
 
-  const handleSavePrompt = (promptId) => {
-    updatePrompt(promptId, { content: editContent })
-    setEditingPrompt(null)
-  }
 
   const testSupabaseConnection = async () => {
     setTestingConnection(true)
@@ -428,7 +424,10 @@ export default function Settings() {
 
               {/* Add New Button */}
               <button
-                onClick={() => setNewPromptModalOpen(true)}
+                onClick={() => {
+                  setEditingPromptData(null)
+                  setShowPromptEditor(true)
+                }}
                 className="w-full bg-quant-surface border border-dashed border-quant-border rounded-xl p-4 flex items-center justify-center gap-2 text-gray-400 hover:border-accent-cyan hover:text-accent-cyan transition-all"
               >
                 <Plus size={18} />
@@ -447,46 +446,36 @@ export default function Settings() {
                         <h3 className="font-semibold text-white">{prompt.name}</h3>
                         <button
                           onClick={() => {
-                            if (editingPrompt === prompt.id) {
-                              handleSavePrompt(prompt.id)
-                            } else {
-                              setEditingPrompt(prompt.id)
-                              setEditContent(prompt.content)
-                            }
+                            setEditingPromptData(prompt)
+                            setShowPromptEditor(true)
                           }}
-                          className={`p-2 rounded-lg transition-colors ${
-                            editingPrompt === prompt.id
-                              ? 'bg-accent-green/20 text-accent-green'
-                              : 'hover:bg-quant-surface text-gray-400'
-                          }`}
+                          className="p-2 rounded-lg transition-colors hover:bg-quant-surface text-gray-400"
                         >
-                          {editingPrompt === prompt.id ? <Check size={16} /> : <Edit3 size={16} />}
+                          <Edit3 size={16} />
                         </button>
                       </div>
 
-                      {editingPrompt === prompt.id ? (
-                        <textarea
-                          value={editContent}
-                          onChange={(e) => setEditContent(e.target.value)}
-                          className="w-full bg-quant-surface border border-quant-border rounded-lg px-3 py-2 text-sm text-white font-mono resize-none"
-                          rows={4}
-                        />
-                      ) : (
-                        <p className="text-sm text-gray-400 font-mono line-clamp-2">
-                          {prompt.content}
-                        </p>
-                      )}
+                      <p className="text-sm text-gray-400 font-mono line-clamp-2">
+                        {prompt.content}
+                      </p>
 
                       <div className="flex items-center justify-between mt-3 pt-3 border-t border-quant-border">
-                        <span className={`text-xs px-2 py-0.5 rounded-full ${
-                          prompt.mode === 'auto'
-                            ? 'bg-accent-cyan/20 text-accent-cyan'
-                            : 'bg-accent-orange/20 text-accent-orange'
-                        }`}>
-                          {prompt.mode.toUpperCase()}
-                        </span>
+                        <div className="flex items-center gap-2">
+                          <span className={`text-xs px-2 py-0.5 rounded-full ${
+                            prompt.mode === 'auto'
+                              ? 'bg-accent-cyan/20 text-accent-cyan'
+                              : 'bg-accent-orange/20 text-accent-orange'
+                          }`}>
+                            {prompt.mode?.toUpperCase() || 'AUTO'}
+                          </span>
+                          {prompt.leverage && (
+                            <span className="text-xs text-gray-500">
+                              {prompt.leverage}x
+                            </span>
+                          )}
+                        </div>
                         <span className="text-xs text-gray-500">
-                          Modified: {new Date(prompt.updatedAt).toLocaleDateString()}
+                          {prompt.updatedAt ? new Date(prompt.updatedAt).toLocaleDateString() : '-'}
                         </span>
                       </div>
                     </div>
@@ -1204,6 +1193,23 @@ export default function Settings() {
           )}
         </AnimatePresence>
       </div>
+
+      {/* Prompt Editor Modal */}
+      <AnimatePresence>
+        {showPromptEditor && (
+          <PromptEditorModal
+            prompt={editingPromptData}
+            onClose={() => {
+              setShowPromptEditor(false)
+              setEditingPromptData(null)
+            }}
+            onSave={() => {
+              setShowPromptEditor(false)
+              setEditingPromptData(null)
+            }}
+          />
+        )}
+      </AnimatePresence>
     </motion.div>
   )
 }
