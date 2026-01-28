@@ -27,13 +27,13 @@ export default function Incubator() {
   const [expandedEgg, setExpandedEgg] = useState(null)
   const [expandedConfig, setExpandedConfig] = useState({}) // Track expanded config per egg
   const [showConsole, setShowConsole] = useState(false)
-  const [sortBy, setSortBy] = useState('recent') // 'recent', 'pnl', 'winRate', 'trades'
+  const [sortBy, setSortBy] = useState('pnl') // 'pnl', 'recent', 'winRate', 'trades'
   const [filterBy, setFilterBy] = useState('all') // 'all', 'profitable', 'unprofitable', 'hatched', 'expired'
 
-  // Sort options
+  // Sort options - PnL first (default)
   const sortOptions = [
-    { id: 'recent', label: 'Reciente' },
     { id: 'pnl', label: 'PnL' },
+    { id: 'recent', label: 'Reciente' },
     { id: 'winRate', label: 'Win Rate' },
     { id: 'trades', label: 'Trades' }
   ]
