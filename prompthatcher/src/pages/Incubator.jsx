@@ -537,13 +537,16 @@ export default function Incubator() {
                                 </div>
 
                                 {/* POTENTIAL PROFIT - Clear display for dummies */}
-                                {!isClosed && signal.capital && signal.leverage && (
+                                {!isClosed && (
                                   (() => {
                                     const entry = parseFloat(signal.entry)
                                     const tp = parseFloat(signal.takeProfit)
                                     const sl = parseFloat(signal.stopLoss)
-                                    const lev = signal.leverage || 1
-                                    const cap = signal.capital || 0
+                                    // Use signal values or fall back to egg config
+                                    const lev = signal.leverage || egg.config?.leverage || 1
+                                    const totalCap = egg.config?.capital || signal.capital || 1000
+                                    const numTrades = eggSignals.length || 1
+                                    const cap = signal.capital || (totalCap / numTrades)
 
                                     // Calculate price movement percentages
                                     const tpMovePct = isLong
