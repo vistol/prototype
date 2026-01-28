@@ -60,21 +60,28 @@ export default function Incubator() {
     }
   }
 
-  // Calculate total unrealized PnL for an egg
+  // Calculate total unrealized PnL for an egg (capital-weighted)
   const getEggUnrealizedPnl = (egg) => {
     const eggSignals = signals.filter(s => egg.trades.includes(s.id) && s.status === 'active')
-    let totalPnl = 0
+    let totalWeightedPnl = 0
+    let totalCapital = 0
     let hasPrice = false
 
     eggSignals.forEach(signal => {
       const pnl = getUnrealizedPnl(signal)
+      const capital = parseFloat(signal.capital) || (egg.totalCapital / egg.trades.length)
+
       if (pnl !== null) {
-        totalPnl += pnl
+        // Weight PnL by capital allocation
+        totalWeightedPnl += (pnl / 100) * capital
+        totalCapital += capital
         hasPrice = true
       }
     })
 
-    return hasPrice ? totalPnl / eggSignals.length : null
+    // Return weighted percentage based on total capital
+    if (!hasPrice || totalCapital === 0) return null
+    return (totalWeightedPnl / totalCapital) * 100
   }
 
   return (
@@ -215,9 +222,12 @@ export default function Incubator() {
                         {/* Progress Bar */}
                         <div className="mt-3">
                           <div className="flex justify-between text-xs mb-1">
-                            <span className="text-gray-500">Progress</span>
+                            <span className="text-gray-500 flex items-center gap-1">
+                              <span className="w-1.5 h-1.5 rounded-full bg-accent-cyan animate-pulse" />
+                              {progress.active} live
+                            </span>
                             <span className="text-accent-cyan">
-                              {progress.closed}/{progress.total} executed
+                              {progress.closed}/{progress.total} closed
                             </span>
                           </div>
                           <div className="h-2 bg-quant-surface rounded-full overflow-hidden">
@@ -359,42 +369,62 @@ export default function Incubator() {
                                 {/* Progress to TP/SL */}
                                 {currentPrice && !isClosed && (
                                   <div className="mt-2">
-                                    <div className="h-1.5 bg-quant-surface rounded-full overflow-hidden flex">
-                                      {(() => {
-                                        const entry = parseFloat(signal.entry)
-                                        const tp = parseFloat(signal.takeProfit)
-                                        const sl = parseFloat(signal.stopLoss)
+                                    {(() => {
+                                      const entry = parseFloat(signal.entry)
+                                      const tp = parseFloat(signal.takeProfit)
+                                      const sl = parseFloat(signal.stopLoss)
 
-                                        let progressToTp, progressToSl
+                                      // Calculate position in the SL-TP range
+                                      let progressPercent, entryPercent
+                                      const totalRange = Math.abs(tp - sl)
 
-                                        if (isLong) {
-                                          const range = tp - sl
-                                          const position = ((currentPrice - sl) / range) * 100
-                                          progressToTp = Math.max(0, Math.min(100, position))
-                                        } else {
-                                          const range = sl - tp
-                                          const position = ((sl - currentPrice) / range) * 100
-                                          progressToTp = Math.max(0, Math.min(100, position))
-                                        }
+                                      if (isLong) {
+                                        // LONG: SL < Entry < TP
+                                        progressPercent = ((currentPrice - sl) / totalRange) * 100
+                                        entryPercent = ((entry - sl) / totalRange) * 100
+                                      } else {
+                                        // SHORT: TP < Entry < SL
+                                        progressPercent = ((sl - currentPrice) / totalRange) * 100
+                                        entryPercent = ((sl - entry) / totalRange) * 100
+                                      }
 
-                                        return (
-                                          <motion.div
-                                            initial={{ width: 0 }}
-                                            animate={{ width: `${progressToTp}%` }}
-                                            className={`h-full ${
-                                              progressToTp > 50
-                                                ? 'bg-gradient-to-r from-accent-yellow to-accent-green'
-                                                : 'bg-gradient-to-r from-accent-red to-accent-yellow'
-                                            }`}
-                                          />
-                                        )
-                                      })()}
-                                    </div>
-                                    <div className="flex justify-between text-[10px] mt-0.5">
-                                      <span className="text-accent-red">SL</span>
-                                      <span className="text-gray-500">Entry</span>
-                                      <span className="text-accent-green">TP</span>
-                                    </div>
+                                      progressPercent = Math.max(0, Math.min(100, progressPercent))
+                                      entryPercent = Math.max(0, Math.min(100, entryPercent))
+
+                                      const isInProfit = progressPercent > entryPercent
+
+                                      return (
+                                        <>
+                                          <div className="h-1.5 bg-quant-surface rounded-full overflow-hidden relative">
+                                            {/* Entry marker */}
+                                            <div
+                                              className="absolute top-0 bottom-0 w-0.5 bg-white/50 z-10"
+                                              style={{ left: `${entryPercent}%` }}
+                                            />
+                                            {/* Progress bar */}
+                                            <motion.div
+                                              initial={{ width: 0 }}
+                                              animate={{ width: `${progressPercent}%` }}
+                                              className={`h-full ${
+                                                isInProfit
+                                                  ? 'bg-gradient-to-r from-accent-yellow to-accent-green'
+                                                  : 'bg-gradient-to-r from-accent-red to-accent-yellow'
+                                              }`}
+                                            />
+                                          </div>
+                                          <div className="flex justify-between text-[10px] mt-0.5 relative">
+                                            <span className="text-accent-red">SL ${sl.toFixed(2)}</span>
+                                            <span
+                                              className="text-gray-400 absolute"
+                                              style={{ left: `${entryPercent}%`, transform: 'translateX(-50%)' }}
+                                            >
+                                              E
+                                            </span>
+                                            <span className="text-accent-green">TP ${tp.toFixed(2)}</span>
+                                          </div>
+                                        </>
+                                      )
+                                    })()}
                                   </div>
                                 )}
                               </div>
