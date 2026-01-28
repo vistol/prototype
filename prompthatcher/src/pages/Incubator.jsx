@@ -393,7 +393,7 @@ export default function Incubator() {
                         className="border-t border-quant-border overflow-hidden"
                       >
                         <div className="p-3 space-y-4 bg-quant-surface/20">
-                          {/* Configuration Section - Option C: Minimalist Dashboard */}
+                          {/* Configuration Section - Clean & Simple */}
                           {(() => {
                             // Create fallback config for old eggs without config
                             const baseConfig = egg.config || {
@@ -409,7 +409,6 @@ export default function Incubator() {
                             // Calculate target % from trade data if not stored
                             let effectiveTargetPct = baseConfig.targetPct
                             if (!effectiveTargetPct && eggSignals.length > 0) {
-                              // Derive from first signal's reward percentage × leverage
                               const firstSignal = eggSignals[0]
                               const rewardPct = parseFloat(firstSignal.rewardPercent) || 0
                               const lev = firstSignal.leverage || baseConfig.leverage || 5
@@ -417,84 +416,43 @@ export default function Incubator() {
                             }
 
                             const config = { ...baseConfig, targetPct: effectiveTargetPct }
+                            const potentialGain = config.targetPct ? (config.capital * config.targetPct / 100) : 0
+                            const finalAmount = config.capital + potentialGain
+                            const priceMove = config.targetPct ? (config.targetPct / config.leverage) : 0
+
                             return (
                             <div className="bg-quant-card rounded-xl p-4 border border-quant-border">
-                              {/* Investment Flow */}
-                              <div className="flex items-center justify-between mb-3">
-                                {/* Left: Investment */}
-                                <div className="text-center">
-                                  <div className="text-lg font-bold text-white font-mono">
-                                    ${config.capital}
-                                  </div>
-                                  <div className="text-[10px] text-gray-500">
-                                    con {config.leverage}x
-                                  </div>
-                                  <div className="text-[10px] text-gray-400 mt-0.5">
-                                    tu inversión
-                                  </div>
+                              {/* Main: Simple transformation display */}
+                              <div className="text-center mb-4">
+                                <div className="flex items-center justify-center gap-3 mb-2">
+                                  <span className="text-2xl font-bold text-white font-mono">${config.capital.toLocaleString()}</span>
+                                  <span className="text-gray-500">→</span>
+                                  <span className="text-2xl font-bold text-accent-green font-mono">${finalAmount.toLocaleString()}</span>
                                 </div>
-
-                                {/* Center: Arrow with percentage */}
-                                <div className="flex-1 flex items-center justify-center px-3">
-                                  <div className="flex items-center gap-2">
-                                    <div className="h-px w-6 bg-gradient-to-r from-transparent to-accent-cyan"></div>
-                                    <div className="px-3 py-1 rounded-full bg-accent-cyan/10 border border-accent-cyan/30">
-                                      <span className="text-accent-cyan font-bold text-sm">
-                                        {config.targetPct ? `+${config.targetPct}%` : '—'}
-                                      </span>
-                                    </div>
-                                    <div className="h-px w-6 bg-gradient-to-r from-accent-cyan to-accent-green"></div>
-                                    <TrendingUp size={14} className="text-accent-green" />
+                                {config.targetPct > 0 && (
+                                  <div className="inline-block px-3 py-1 rounded-full bg-accent-green/10 border border-accent-green/30">
+                                    <span className="text-accent-green font-bold">+{config.targetPct}% ganancia</span>
                                   </div>
-                                </div>
-
-                                {/* Right: Potential Gain */}
-                                <div className="text-center">
-                                  <div className="text-lg font-bold text-accent-green font-mono">
-                                    {config.targetPct
-                                      ? `+$${((config.capital * config.targetPct) / 100).toFixed(0)}`
-                                      : '—'
-                                    }
-                                  </div>
-                                  <div className="text-[10px] text-gray-500">
-                                    objetivo
-                                  </div>
-                                  <div className="text-[10px] text-accent-green mt-0.5">
-                                    ganancia
-                                  </div>
-                                </div>
+                                )}
                               </div>
 
-                              {/* Explanation Box */}
-                              {config.targetPct && (
-                                <div className="mb-3 px-3 py-2 rounded-lg bg-quant-surface border border-quant-border">
-                                  <div className="flex items-center gap-2 text-xs text-gray-300">
-                                    <Activity size={12} className="text-accent-cyan shrink-0" />
-                                    <span>
-                                      Precio debe moverse <span className="text-accent-cyan font-mono font-medium">{(config.targetPct / config.leverage).toFixed(1)}%</span> para ganar <span className="text-accent-green font-medium">+{config.targetPct}%</span>
-                                    </span>
-                                  </div>
+                              {/* Explanation - Super simple */}
+                              {config.targetPct > 0 && (
+                                <div className="text-center text-sm text-gray-400 mb-4 px-2">
+                                  Con <span className="text-white font-medium">{config.leverage}x</span> leverage,
+                                  solo necesitas <span className="text-accent-cyan font-medium">{priceMove.toFixed(1)}%</span> de movimiento
                                 </div>
                               )}
 
                               {/* Config Pills Row */}
-                              <div className="flex items-center justify-between gap-2 text-[10px]">
-                                <div className="flex items-center gap-1 px-2 py-1 rounded-md bg-quant-surface text-gray-400">
-                                  <Clock size={10} className="text-accent-purple" />
-                                  <span>{EXECUTION_LABELS[config.executionTime] || config.executionTime}</span>
-                                </div>
-                                <div className="flex items-center gap-1 px-2 py-1 rounded-md bg-quant-surface text-gray-400">
-                                  <span>{AI_MODEL_LABELS[config.aiModel]?.icon}</span>
-                                  <span>{AI_MODEL_LABELS[config.aiModel]?.name || config.aiModel}</span>
-                                </div>
-                                <div className="flex items-center gap-1 px-2 py-1 rounded-md bg-quant-surface text-gray-400">
-                                  <Target size={10} className="text-accent-orange" />
-                                  <span>IPE {config.minIpe}%</span>
-                                </div>
-                                <div className="flex items-center gap-1 px-2 py-1 rounded-md bg-quant-surface text-gray-400">
-                                  <Hash size={10} />
-                                  <span>{config.numResults}</span>
-                                </div>
+                              <div className="flex items-center justify-center gap-3 text-[10px] text-gray-500">
+                                <span>{EXECUTION_LABELS[config.executionTime] || config.executionTime}</span>
+                                <span>•</span>
+                                <span>{AI_MODEL_LABELS[config.aiModel]?.icon} {AI_MODEL_LABELS[config.aiModel]?.name || config.aiModel}</span>
+                                <span>•</span>
+                                <span>IPE {config.minIpe}%</span>
+                                <span>•</span>
+                                <span>{config.numResults} trade{config.numResults !== 1 ? 's' : ''}</span>
                               </div>
                             </div>
                           )})()}
