@@ -7,15 +7,19 @@ export default function EggIcon({
   className = ''
 }) {
   const getEggColor = () => {
+    if (status === 'expired') {
+      return '#f97316' // orange for expired
+    }
     if (status === 'hatched') {
-      return winRate >= 60 ? '#10b981' : '#ef4444'
+      return winRate >= 50 ? '#10b981' : '#ef4444'
     }
     return '#00f0ff'
   }
 
   const getGlowIntensity = () => {
     if (status === 'incubating') return 0.4
-    if (status === 'hatched' && winRate >= 60) return 0.6
+    if (status === 'expired') return 0.35
+    if (status === 'hatched' && winRate >= 50) return 0.6
     return 0.3
   }
 
@@ -103,6 +107,43 @@ export default function EggIcon({
             initial={{ pathLength: 0 }}
             animate={{ pathLength: 1 }}
             transition={{ duration: 0.3, delay: 0.6 }}
+          />
+        </g>
+      )}
+
+      {/* Timer icon for expired eggs */}
+      {status === 'expired' && (
+        <g>
+          {/* Clock circle */}
+          <motion.circle
+            cx="50"
+            cy="55"
+            r="12"
+            stroke={getEggColor()}
+            strokeWidth="2"
+            fill="none"
+            initial={{ scale: 0 }}
+            animate={{ scale: 1 }}
+            transition={{ duration: 0.3, delay: 0.2 }}
+          />
+          {/* Clock hands */}
+          <motion.line
+            x1="50" y1="55" x2="50" y2="47"
+            stroke={getEggColor()}
+            strokeWidth="2"
+            strokeLinecap="round"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ delay: 0.4 }}
+          />
+          <motion.line
+            x1="50" y1="55" x2="56" y2="55"
+            stroke={getEggColor()}
+            strokeWidth="2"
+            strokeLinecap="round"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ delay: 0.5 }}
           />
         </g>
       )}

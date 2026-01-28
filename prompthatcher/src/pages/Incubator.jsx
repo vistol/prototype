@@ -12,9 +12,19 @@ export default function Incubator() {
   const [expandedEgg, setExpandedEgg] = useState(null)
   const [showConsole, setShowConsole] = useState(false)
 
-  const filteredEggs = eggs.filter(e =>
-    activeFilter === 'incubating' ? e.status === 'incubating' : e.status === 'hatched'
-  )
+  // Check if egg is expired
+  const isEggExpired = (egg) => egg.expiresAt && new Date(egg.expiresAt) <= new Date()
+
+  // Filter eggs: Incubating (active & not expired) vs Hatched (completed or expired)
+  const filteredEggs = eggs.filter(e => {
+    const expired = isEggExpired(e)
+    if (activeFilter === 'incubating') {
+      return e.status === 'incubating' && !expired
+    } else {
+      // Hatched tab shows: naturally hatched OR expired eggs
+      return e.status === 'hatched' || (e.status === 'incubating' && expired)
+    }
+  })
 
   // Get egg status info
   const getEggStatus = (egg) => {
@@ -81,6 +91,37 @@ export default function Incubator() {
     if (!price) return null
     const delta = ((price - parseFloat(signal.entry)) / parseFloat(signal.entry)) * 100
     return signal.strategy === 'LONG' ? delta > -0.5 : delta < 0.5
+  }
+
+  // Calculate results for an egg (used for both hatched and expired)
+  const calculateEggResults = (egg) => {
+    const eggSignals = signals.filter(s => egg.trades.includes(s.id))
+    const closedSignals = eggSignals.filter(s => s.status === 'closed')
+
+    if (closedSignals.length === 0) {
+      return {
+        totalTrades: eggSignals.length,
+        closedTrades: 0,
+        wins: 0,
+        winRate: 0,
+        totalPnl: 0,
+        profitFactor: 0
+      }
+    }
+
+    const wins = closedSignals.filter(s => s.result === 'win').length
+    const totalPnl = closedSignals.reduce((sum, s) => sum + (s.pnl || 0), 0)
+    const grossProfit = closedSignals.filter(s => (s.pnl || 0) > 0).reduce((sum, s) => sum + s.pnl, 0)
+    const grossLoss = Math.abs(closedSignals.filter(s => (s.pnl || 0) < 0).reduce((sum, s) => sum + s.pnl, 0))
+
+    return {
+      totalTrades: eggSignals.length,
+      closedTrades: closedSignals.length,
+      wins,
+      winRate: Math.round((wins / closedSignals.length) * 100),
+      totalPnl,
+      profitFactor: grossLoss > 0 ? grossProfit / grossLoss : (grossProfit > 0 ? Infinity : 0)
+    }
   }
 
   return (
@@ -167,8 +208,15 @@ export default function Incubator() {
               const status = getEggStatus(egg)
               const eggSignals = signals.filter(s => egg.trades.includes(s.id))
               const isExpanded = expandedEgg === egg.id
-              const pnl = egg.status === 'incubating' ? getEggPnl(egg, status) : null
+              const isExpiredEgg = isEggExpired(egg)
+              const isCompleted = egg.status === 'hatched' || isExpiredEgg
+              const pnl = !isCompleted ? getEggPnl(egg, status) : null
               const timeLeft = formatTime(egg)
+
+              // Calculate results for completed eggs (hatched or expired)
+              const results = isCompleted
+                ? (egg.results || calculateEggResults(egg))
+                : null
 
               return (
                 <motion.div
@@ -178,7 +226,13 @@ export default function Incubator() {
                   animate={{ opacity: 1, y: 0 }}
                   exit={{ opacity: 0, x: -100 }}
                   transition={{ delay: index * 0.05 }}
-                  className="bg-quant-card border border-quant-border rounded-2xl overflow-hidden"
+                  className={`bg-quant-card rounded-2xl overflow-hidden border ${
+                    isExpiredEgg
+                      ? 'border-accent-orange/30'
+                      : egg.status === 'hatched'
+                        ? 'border-accent-green/30'
+                        : 'border-quant-border'
+                  }`}
                 >
                   {/* Card Header */}
                   <div
@@ -190,10 +244,10 @@ export default function Incubator() {
                       <div className="relative flex-shrink-0">
                         <EggIcon
                           size={52}
-                          status={egg.status}
-                          winRate={egg.results?.winRate || 0}
+                          status={isExpiredEgg ? 'expired' : egg.status}
+                          winRate={results?.winRate || 0}
                         />
-                        {status.active > 0 && !status.isExpired && (
+                        {!isCompleted && status.active > 0 && (
                           <div className="absolute -bottom-0.5 -right-0.5 w-3 h-3 bg-accent-green rounded-full border-2 border-quant-card animate-pulse" />
                         )}
                       </div>
@@ -214,20 +268,27 @@ export default function Incubator() {
 
                         {/* Status row - single line */}
                         <div className="flex items-center gap-3 mt-1.5 text-xs text-gray-400">
-                          {/* Progress fraction */}
-                          <span className={status.isExpired ? 'text-accent-orange' : 'text-accent-cyan'}>
-                            {status.isExpired ? `${status.total - status.closed} expired` : `${status.active} open`}
-                            <span className="text-gray-500 mx-1">·</span>
-                            <span className="text-gray-400">{status.closed}/{status.total} closed</span>
-                          </span>
+                          {isCompleted ? (
+                            // Completed egg status
+                            <span className={isExpiredEgg ? 'text-accent-orange' : 'text-accent-green'}>
+                              {isExpiredEgg ? '⏱ Expired' : '✓ Hatched'}
+                              <span className="text-gray-500 mx-1">·</span>
+                              <span className="text-gray-400">{results?.closedTrades || status.closed}/{status.total} closed</span>
+                            </span>
+                          ) : (
+                            // Active egg status
+                            <span className="text-accent-cyan">
+                              {status.active} open
+                              <span className="text-gray-500 mx-1">·</span>
+                              <span className="text-gray-400">{status.closed}/{status.total} closed</span>
+                            </span>
+                          )}
 
-                          {/* Time */}
-                          {timeLeft && (
+                          {/* Time - only show for active eggs */}
+                          {!isCompleted && timeLeft && (
                             <>
                               <span className="text-gray-600">|</span>
-                              <span className={`flex items-center gap-1 ${
-                                timeLeft === 'Expired' ? 'text-accent-orange' : ''
-                              }`}>
+                              <span className="flex items-center gap-1">
                                 <Clock size={11} />
                                 {timeLeft}
                               </span>
@@ -236,17 +297,15 @@ export default function Incubator() {
                         </div>
 
                         {/* Progress bar - minimal */}
-                        <div className="mt-3 h-1.5 bg-quant-surface rounded-full overflow-hidden">
-                          <motion.div
-                            initial={{ width: 0 }}
-                            animate={{ width: `${status.progress}%` }}
-                            className={`h-full rounded-full ${
-                              status.isExpired
-                                ? 'bg-accent-orange'
-                                : 'bg-gradient-to-r from-accent-cyan to-accent-green'
-                            }`}
-                          />
-                        </div>
+                        {!isCompleted && (
+                          <div className="mt-3 h-1.5 bg-quant-surface rounded-full overflow-hidden">
+                            <motion.div
+                              initial={{ width: 0 }}
+                              animate={{ width: `${status.progress}%` }}
+                              className="h-full rounded-full bg-gradient-to-r from-accent-cyan to-accent-green"
+                            />
+                          </div>
+                        )}
                       </div>
 
                       {/* Expand indicator */}
@@ -255,14 +314,14 @@ export default function Incubator() {
                       </div>
                     </div>
 
-                    {/* Hatched results */}
-                    {egg.status === 'hatched' && egg.results && (
+                    {/* Results for completed eggs (hatched or expired) */}
+                    {isCompleted && results && (
                       <div className="grid grid-cols-4 gap-2 mt-4 pt-3 border-t border-quant-border">
                         {[
-                          { label: 'Trades', value: egg.results.totalTrades, color: 'text-white' },
-                          { label: 'Win Rate', value: `${egg.results.winRate}%`, color: egg.results.winRate >= 50 ? 'text-accent-green' : 'text-accent-red' },
-                          { label: 'PF', value: egg.results.profitFactor === Infinity ? '∞' : egg.results.profitFactor.toFixed(1), color: egg.results.profitFactor >= 1 ? 'text-accent-green' : 'text-accent-red' },
-                          { label: 'PnL', value: `${egg.results.totalPnl >= 0 ? '+' : ''}${egg.results.totalPnl.toFixed(0)}`, color: egg.results.totalPnl >= 0 ? 'text-accent-green' : 'text-accent-red' }
+                          { label: 'Closed', value: `${results.closedTrades}/${results.totalTrades}`, color: 'text-white' },
+                          { label: 'Win Rate', value: `${results.winRate}%`, color: results.winRate >= 50 ? 'text-accent-green' : 'text-accent-red' },
+                          { label: 'PF', value: results.profitFactor === Infinity ? '∞' : results.profitFactor.toFixed(1), color: results.profitFactor >= 1 ? 'text-accent-green' : 'text-accent-red' },
+                          { label: 'PnL', value: `${results.totalPnl >= 0 ? '+' : ''}${results.totalPnl.toFixed(1)}%`, color: results.totalPnl >= 0 ? 'text-accent-green' : 'text-accent-red' }
                         ].map(stat => (
                           <div key={stat.label} className="text-center">
                             <span className="text-[10px] text-gray-500 uppercase block">{stat.label}</span>
