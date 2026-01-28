@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Archive, MoreVertical, Trash2, Eye, Clock, TrendingUp, TrendingDown, ChevronDown, ChevronUp, DollarSign } from 'lucide-react'
+import { Archive, MoreVertical, Trash2, Eye, Clock, TrendingUp, TrendingDown, ChevronDown, ChevronUp, DollarSign, Circle } from 'lucide-react'
 import useStore from '../store/useStore'
 import Header from '../components/Header'
 import EggIcon from '../components/EggIcon'
@@ -45,6 +45,28 @@ export default function Incubator() {
   // Get current price for an asset
   const getCurrentPrice = (asset) => {
     return prices[asset]?.price || null
+  }
+
+  // Simulate CVD (Cumulative Volume Delta) validation
+  // In production, this would fetch real order book imbalance data
+  const getCVDValidation = (signal) => {
+    const currentPrice = getCurrentPrice(signal.asset)
+    if (!currentPrice) return null
+
+    const entry = parseFloat(signal.entry)
+    const priceDelta = ((currentPrice - entry) / entry) * 100
+
+    // CVD confirms if price movement aligns with trade direction
+    // LONG: positive if price is rising (CVD buying pressure)
+    // SHORT: positive if price is falling (CVD selling pressure)
+    const isConfirmed = signal.strategy === 'LONG'
+      ? priceDelta > -0.5  // LONG confirmed if not falling too much
+      : priceDelta < 0.5   // SHORT confirmed if not rising too much
+
+    return {
+      confirmed: isConfirmed,
+      delta: priceDelta.toFixed(2)
+    }
   }
 
   // Calculate unrealized PnL for a trade
@@ -222,12 +244,15 @@ export default function Incubator() {
                         {/* Progress Bar */}
                         <div className="mt-3">
                           <div className="flex justify-between text-xs mb-1">
-                            <span className="text-gray-500 flex items-center gap-1">
-                              <span className="w-1.5 h-1.5 rounded-full bg-accent-cyan animate-pulse" />
-                              {progress.active} live
+                            <span className="text-accent-cyan flex items-center gap-1">
+                              {progress.active > 0 && (
+                                <span className="w-1.5 h-1.5 rounded-full bg-accent-cyan animate-pulse" />
+                              )}
+                              {progress.active} Open
                             </span>
-                            <span className="text-accent-cyan">
-                              {progress.closed}/{progress.total} closed
+                            <span className="text-gray-400">|</span>
+                            <span className={progress.closed > 0 ? 'text-accent-green' : 'text-gray-500'}>
+                              {progress.closed} Closed
                             </span>
                           </div>
                           <div className="h-2 bg-quant-surface rounded-full overflow-hidden">
@@ -292,6 +317,7 @@ export default function Incubator() {
                             const isClosed = signal.status === 'closed'
                             const currentPrice = getCurrentPrice(signal.asset)
                             const unrealizedPnl = getUnrealizedPnl(signal)
+                            const cvd = !isClosed ? getCVDValidation(signal) : null
 
                             return (
                               <div
@@ -315,9 +341,18 @@ export default function Incubator() {
                                         <TrendingDown size={14} className="text-accent-red" />
                                       )}
                                     </div>
-                                    <div>
+                                    <div className="flex items-center gap-1.5">
                                       <span className="text-sm font-medium text-white">{signal.asset}</span>
-                                      <span className={`ml-2 text-xs ${
+                                      {/* CVD Validation Indicator */}
+                                      {cvd && (
+                                        <span
+                                          className={`w-2 h-2 rounded-full ${
+                                            cvd.confirmed ? 'bg-accent-green' : 'bg-accent-red'
+                                          }`}
+                                          title={`CVD ${cvd.confirmed ? 'confirms' : 'diverges'} (${cvd.delta}%)`}
+                                        />
+                                      )}
+                                      <span className={`ml-1 text-xs ${
                                         isLong ? 'text-accent-green' : 'text-accent-red'
                                       }`}>
                                         {signal.strategy}
@@ -374,53 +409,63 @@ export default function Incubator() {
                                       const tp = parseFloat(signal.takeProfit)
                                       const sl = parseFloat(signal.stopLoss)
 
-                                      // Calculate position in the SL-TP range
-                                      let progressPercent, entryPercent
-                                      const totalRange = Math.abs(tp - sl)
+                                      // Universal formula: (current - sl) / (tp - sl)
+                                      // Works for both LONG and SHORT:
+                                      // - LONG: SL < Entry < TP, denominator positive
+                                      // - SHORT: TP < Entry < SL, denominator negative (auto-inverts)
+                                      const range = tp - sl
 
-                                      if (isLong) {
-                                        // LONG: SL < Entry < TP
-                                        progressPercent = ((currentPrice - sl) / totalRange) * 100
-                                        entryPercent = ((entry - sl) / totalRange) * 100
-                                      } else {
-                                        // SHORT: TP < Entry < SL
-                                        progressPercent = ((sl - currentPrice) / totalRange) * 100
-                                        entryPercent = ((sl - entry) / totalRange) * 100
-                                      }
+                                      // Raw percentages (can exceed 0-100 if past TP/SL)
+                                      const progressRaw = ((currentPrice - sl) / range) * 100
+                                      const entryRaw = ((entry - sl) / range) * 100
 
-                                      progressPercent = Math.max(0, Math.min(100, progressPercent))
-                                      entryPercent = Math.max(0, Math.min(100, entryPercent))
+                                      // Clamp for display
+                                      const progressPercent = Math.max(0, Math.min(100, progressRaw))
+                                      const entryPercent = Math.max(0, Math.min(100, entryRaw))
 
-                                      const isInProfit = progressPercent > entryPercent
+                                      // In profit when progress > entry (toward TP)
+                                      const isInProfit = progressRaw > entryRaw
+
+                                      // For display: always show lower price on left, higher on right
+                                      const leftPrice = Math.min(sl, tp)
+                                      const rightPrice = Math.max(sl, tp)
+                                      const leftLabel = sl < tp ? 'SL' : 'TP'
+                                      const rightLabel = sl < tp ? 'TP' : 'SL'
+                                      const leftColor = sl < tp ? 'text-accent-red' : 'text-accent-green'
+                                      const rightColor = sl < tp ? 'text-accent-green' : 'text-accent-red'
+
+                                      // For SHORT, we need to flip the visual since lower prices are on left
+                                      const displayProgress = isLong ? progressPercent : (100 - progressPercent)
+                                      const displayEntry = isLong ? entryPercent : (100 - entryPercent)
 
                                       return (
                                         <>
                                           <div className="h-1.5 bg-quant-surface rounded-full overflow-hidden relative">
-                                            {/* Entry marker */}
+                                            {/* Entry marker - white vertical line */}
                                             <div
-                                              className="absolute top-0 bottom-0 w-0.5 bg-white/50 z-10"
-                                              style={{ left: `${entryPercent}%` }}
+                                              className="absolute top-0 bottom-0 w-0.5 bg-white z-10"
+                                              style={{ left: `${displayEntry}%` }}
                                             />
                                             {/* Progress bar */}
                                             <motion.div
                                               initial={{ width: 0 }}
-                                              animate={{ width: `${progressPercent}%` }}
+                                              animate={{ width: `${displayProgress}%` }}
                                               className={`h-full ${
                                                 isInProfit
-                                                  ? 'bg-gradient-to-r from-accent-yellow to-accent-green'
-                                                  : 'bg-gradient-to-r from-accent-red to-accent-yellow'
+                                                  ? 'bg-gradient-to-r from-accent-cyan to-accent-green'
+                                                  : 'bg-gradient-to-r from-accent-red to-accent-orange'
                                               }`}
                                             />
                                           </div>
                                           <div className="flex justify-between text-[10px] mt-0.5 relative">
-                                            <span className="text-accent-red">SL ${sl.toFixed(2)}</span>
+                                            <span className={leftColor}>{leftLabel} ${leftPrice.toFixed(2)}</span>
                                             <span
-                                              className="text-gray-400 absolute"
-                                              style={{ left: `${entryPercent}%`, transform: 'translateX(-50%)' }}
+                                              className="text-white absolute font-bold"
+                                              style={{ left: `${displayEntry}%`, transform: 'translateX(-50%)' }}
                                             >
                                               E
                                             </span>
-                                            <span className="text-accent-green">TP ${tp.toFixed(2)}</span>
+                                            <span className={rightColor}>{rightLabel} ${rightPrice.toFixed(2)}</span>
                                           </div>
                                         </>
                                       )
