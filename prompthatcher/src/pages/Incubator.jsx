@@ -414,12 +414,31 @@ export default function Incubator() {
                                   <span className="text-xs text-white ml-auto">{EXECUTION_LABELS[egg.config.executionTime] || egg.config.executionTime}</span>
                                 </div>
                                 {egg.config.targetPct && (
-                                  <div className="flex items-center gap-1.5 col-span-3 mt-1 pt-1 border-t border-quant-border">
-                                    <TrendingUp size={12} className="text-accent-cyan" />
-                                    <span className="text-xs text-gray-400">Profit Target</span>
-                                    <span className="text-xs font-mono text-accent-cyan font-bold ml-auto">
-                                      +{egg.config.targetPct}% ({egg.config.targetPct >= 100 ? `${(egg.config.targetPct / 100 + 1).toFixed(1)}x` : `$${((egg.config.capital * egg.config.targetPct) / 100).toFixed(0)}`})
-                                    </span>
+                                  <div className="col-span-3 mt-2 p-2 rounded-lg bg-gradient-to-r from-accent-cyan/20 to-accent-green/20 border border-accent-cyan/30">
+                                    <div className="flex items-center justify-between">
+                                      <div className="flex items-center gap-2">
+                                        <div className="w-8 h-8 rounded-full bg-accent-cyan/20 flex items-center justify-center">
+                                          <TrendingUp size={16} className="text-accent-cyan" />
+                                        </div>
+                                        <div>
+                                          <span className="text-[10px] text-gray-400 block">OBJETIVO DE GANANCIA</span>
+                                          <span className="text-sm text-white font-bold">
+                                            Ganar +{egg.config.targetPct}% sobre tu capital
+                                          </span>
+                                        </div>
+                                      </div>
+                                      <div className="text-right">
+                                        <span className="text-accent-green font-bold text-lg block">
+                                          +${((egg.config.capital * egg.config.targetPct) / 100).toFixed(0)}
+                                        </span>
+                                        <span className="text-[10px] text-gray-400">
+                                          de ${egg.config.capital}
+                                        </span>
+                                      </div>
+                                    </div>
+                                    <div className="text-[10px] text-gray-500 mt-1 text-center">
+                                      Con {egg.config.leverage}x leverage, el precio solo necesita moverse {(egg.config.targetPct / egg.config.leverage).toFixed(1)}% para lograr tu objetivo
+                                    </div>
                                   </div>
                                 )}
                                 <div className="flex items-center gap-1.5">
@@ -516,6 +535,52 @@ export default function Incubator() {
                                     SL {parseFloat(signal.stopLoss).toFixed(2)}
                                   </span>
                                 </div>
+
+                                {/* POTENTIAL PROFIT - Clear display for dummies */}
+                                {!isClosed && signal.capital && signal.leverage && (
+                                  (() => {
+                                    const entry = parseFloat(signal.entry)
+                                    const tp = parseFloat(signal.takeProfit)
+                                    const sl = parseFloat(signal.stopLoss)
+                                    const lev = signal.leverage || 1
+                                    const cap = signal.capital || 0
+
+                                    // Calculate price movement percentages
+                                    const tpMovePct = isLong
+                                      ? ((tp - entry) / entry) * 100
+                                      : ((entry - tp) / entry) * 100
+                                    const slMovePct = isLong
+                                      ? ((entry - sl) / entry) * 100
+                                      : ((sl - entry) / entry) * 100
+
+                                    // Calculate $ profit/loss with leverage
+                                    const potentialProfit = (tpMovePct / 100) * lev * cap
+                                    const potentialLoss = (slMovePct / 100) * lev * cap
+                                    const profitPct = tpMovePct * lev
+
+                                    return (
+                                      <div className="mt-2 p-2 rounded-lg bg-gradient-to-r from-accent-green/10 to-accent-red/10 border border-quant-border">
+                                        <div className="flex items-center justify-between text-[10px] text-gray-500 mb-1">
+                                          <span>SI GANAS ({isLong ? '↑' : '↓'} al TP)</span>
+                                          <span>SI PIERDES ({isLong ? '↓' : '↑'} al SL)</span>
+                                        </div>
+                                        <div className="flex items-center justify-between">
+                                          <div className="text-accent-green font-bold">
+                                            <span className="text-lg">+${potentialProfit.toFixed(0)}</span>
+                                            <span className="text-xs ml-1 opacity-70">(+{profitPct.toFixed(0)}%)</span>
+                                          </div>
+                                          <div className="text-accent-red font-bold text-right">
+                                            <span className="text-lg">-${potentialLoss.toFixed(0)}</span>
+                                            <span className="text-xs ml-1 opacity-70">(-{(slMovePct * lev).toFixed(0)}%)</span>
+                                          </div>
+                                        </div>
+                                        <div className="text-[9px] text-gray-500 text-center mt-1">
+                                          Capital: ${cap.toFixed(0)} × {lev}x leverage
+                                        </div>
+                                      </div>
+                                    )
+                                  })()
+                                )}
 
                                 {/* Progress bar - only for active trades */}
                                 {price && !isClosed && !status.isExpired && (
