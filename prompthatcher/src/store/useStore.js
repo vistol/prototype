@@ -22,8 +22,8 @@ import {
   SUPPORTED_PAIRS
 } from '../lib/priceService'
 
-// Price refresh interval (15 minutes)
-const PRICE_REFRESH_INTERVAL = 15 * 60 * 1000
+// Price refresh interval (1 minute for active monitoring)
+const PRICE_REFRESH_INTERVAL = 1 * 60 * 1000
 
 // Max number of activity logs to keep
 const MAX_ACTIVITY_LOGS = 100
@@ -649,25 +649,60 @@ If no truly new strategy can be generated, you must invent a new angle rather th
       // Update trade statuses based on current prices
       updateTradeStatuses: () => {
         const state = get()
-        const { prices, signals, eggs, settings } = state
+        const { prices, signals, eggs } = state
+
+        // Get active trades that need checking
+        const activeTrades = signals.filter(s => s.status === 'active')
+        const incubatingEggs = eggs.filter(e => e.status === 'incubating')
+
+        if (activeTrades.length === 0) {
+          get().addLog('system', `No active trades to check`)
+          return
+        }
 
         let signalsUpdated = false
         let closedTrades = []
         let activatedTrades = []
+        let checkedTrades = []
 
         const updatedSignals = signals.map(signal => {
           if (signal.status !== 'active') return signal
 
           const priceData = prices[signal.asset]
-          if (!priceData) return signal
+          if (!priceData) {
+            get().addLog('trade', `⚠ No price data for ${signal.asset}`, { asset: signal.asset })
+            return signal
+          }
 
           const currentPrice = priceData.price
           const tradeStatus = calculateTradeStatus(signal, currentPrice)
+          const entry = parseFloat(signal.entry)
+          const tp = parseFloat(signal.takeProfit)
+          const sl = parseFloat(signal.stopLoss)
+
+          // Log detailed check info
+          checkedTrades.push({
+            asset: signal.asset,
+            strategy: signal.strategy,
+            currentPrice,
+            entry,
+            tp,
+            sl,
+            distanceToTP: signal.strategy === 'LONG' ? tp - currentPrice : currentPrice - tp,
+            distanceToSL: signal.strategy === 'LONG' ? currentPrice - sl : sl - currentPrice,
+            pnlPercent: tradeStatus.pnlPercent
+          })
 
           // First price update - activate the trade but don't close it yet
-          // This prevents immediate closure when entry price doesn't match market
           if (!signal.priceActivated) {
-            activatedTrades.push({ asset: signal.asset, strategy: signal.strategy, price: currentPrice })
+            activatedTrades.push({
+              asset: signal.asset,
+              strategy: signal.strategy,
+              price: currentPrice,
+              entry,
+              tp,
+              sl
+            })
             return {
               ...signal,
               priceActivated: true,
@@ -677,11 +712,9 @@ If no truly new strategy can be generated, you must invent a new angle rather th
             }
           }
 
-          // Trade is activated - now we can check for TP/SL hits
-          // Only close if price CROSSED the level (not if it started there)
+          // Trade is activated - check for TP/SL hits
           if (tradeStatus.status === 'win' || tradeStatus.status === 'loss') {
             signalsUpdated = true
-            // Find which egg this trade belongs to
             const egg = eggs.find(e => e.trades.includes(signal.id))
             const capital = egg ? (egg.totalCapital / egg.trades.length) : 100
             const pnl = (tradeStatus.pnlPercent / 100) * capital
@@ -691,7 +724,8 @@ If no truly new strategy can be generated, you must invent a new angle rather th
               strategy: signal.strategy,
               result: tradeStatus.status,
               pnl,
-              exitPrice: tradeStatus.exitPrice
+              exitPrice: tradeStatus.exitPrice,
+              eggName: egg?.promptName
             })
 
             return {
@@ -711,23 +745,51 @@ If no truly new strategy can be generated, you must invent a new angle rather th
           }
         })
 
+        // Log trade check summary
+        if (checkedTrades.length > 0) {
+          checkedTrades.forEach(trade => {
+            const direction = trade.strategy === 'LONG' ? '↑' : '↓'
+            const tpDist = Math.abs(trade.distanceToTP).toFixed(2)
+            const slDist = Math.abs(trade.distanceToSL).toFixed(2)
+            const pnlColor = trade.pnlPercent >= 0 ? '+' : ''
+            get().addLog('trade', `${direction} ${trade.asset}: $${trade.currentPrice.toFixed(2)} | TP: $${tpDist} away | SL: $${slDist} away | PnL: ${pnlColor}${trade.pnlPercent.toFixed(2)}%`, trade)
+          })
+        }
+
         // Log activated trades
         activatedTrades.forEach(trade => {
-          get().addLog('trade', `Trade activated: ${trade.asset} ${trade.strategy} @ $${trade.price.toFixed(2)}`, trade)
+          get().addLog('trade', `★ Trade monitoring started: ${trade.asset} ${trade.strategy} | Entry: $${trade.entry} | TP: $${trade.tp} | SL: $${trade.sl}`, trade)
         })
 
         // Log closed trades
         closedTrades.forEach(trade => {
-          const resultEmoji = trade.result === 'win' ? '✓' : '✗'
+          const resultEmoji = trade.result === 'win' ? '✓ TP HIT' : '✗ SL HIT'
           const pnlStr = trade.pnl >= 0 ? `+$${trade.pnl.toFixed(2)}` : `-$${Math.abs(trade.pnl).toFixed(2)}`
-          get().addLog('trade', `${resultEmoji} ${trade.asset} ${trade.strategy} closed: ${pnlStr}`, trade)
+          get().addLog('trade', `${resultEmoji}: ${trade.asset} ${trade.strategy} closed @ $${trade.exitPrice.toFixed(2)} (${pnlStr})`, trade)
+
+          // If trade belongs to an egg, log egg progress
+          if (trade.eggName) {
+            const egg = incubatingEggs.find(e => e.promptName === trade.eggName)
+            if (egg) {
+              const eggSignals = updatedSignals.filter(s => egg.trades.includes(s.id))
+              const closed = eggSignals.filter(s => s.status === 'closed').length
+              const total = eggSignals.length
+              get().addLog('egg', `Egg "${trade.eggName}": ${closed}/${total} trades executed`, { eggName: trade.eggName, closed, total })
+            }
+          }
         })
+
+        // Summary log
+        const stillActive = updatedSignals.filter(s => s.status === 'active').length
+        if (closedTrades.length > 0 || activatedTrades.length > 0) {
+          get().addLog('system', `Trade check: ${closedTrades.length} closed, ${activatedTrades.length} activated, ${stillActive} still active`)
+        }
 
         if (signalsUpdated) {
           set({ signals: updatedSignals })
 
           // Check if any eggs should hatch
-          eggs.filter(e => e.status === 'incubating').forEach(egg => {
+          incubatingEggs.forEach(egg => {
             get().checkEggHatch(egg.id)
           })
 
