@@ -1,119 +1,86 @@
 import { useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Archive, MoreVertical, Trash2, Eye, Clock, TrendingUp, TrendingDown, ChevronDown, ChevronUp, DollarSign, Circle } from 'lucide-react'
+import { Archive, Clock, TrendingUp, TrendingDown, ChevronDown, ChevronUp, Activity } from 'lucide-react'
 import useStore from '../store/useStore'
 import Header from '../components/Header'
 import EggIcon from '../components/EggIcon'
 import MonitoringConsole from '../components/MonitoringConsole'
 
 export default function Incubator() {
-  const { eggs, signals, prices, priceStatus, deletePrompt, setSelectedPromptId } = useStore()
+  const { eggs, signals, prices, priceStatus } = useStore()
   const [activeFilter, setActiveFilter] = useState('incubating')
   const [expandedEgg, setExpandedEgg] = useState(null)
+  const [showConsole, setShowConsole] = useState(false)
 
   const filteredEggs = eggs.filter(e =>
     activeFilter === 'incubating' ? e.status === 'incubating' : e.status === 'hatched'
   )
 
-  const getEggProgress = (egg) => {
+  // Get egg status info
+  const getEggStatus = (egg) => {
     const eggSignals = signals.filter(s => egg.trades.includes(s.id))
     const closedCount = eggSignals.filter(s => s.status === 'closed').length
-
-    // Check if egg has expired
     const isExpired = egg.expiresAt && new Date(egg.expiresAt) <= new Date()
-
-    // If expired, all non-closed trades are considered "expired" (not open)
     const activeCount = isExpired ? 0 : (eggSignals.length - closedCount)
-    const expiredCount = isExpired ? (eggSignals.length - closedCount) : 0
 
     return {
       total: eggSignals.length,
       closed: closedCount,
       active: activeCount,
-      expired: expiredCount,
       isExpired,
-      percentage: eggSignals.length > 0 ? (closedCount / eggSignals.length) * 100 : 0
+      progress: eggSignals.length > 0 ? (closedCount / eggSignals.length) * 100 : 0
     }
   }
 
-  const getTimeRemaining = (egg) => {
-    if (!egg.expiresAt) return 'Target-based'
-    const now = new Date()
-    const expires = new Date(egg.expiresAt)
-    const diff = expires - now
-
+  // Format time remaining
+  const formatTime = (egg) => {
+    if (!egg.expiresAt) return null
+    const diff = new Date(egg.expiresAt) - new Date()
     if (diff <= 0) return 'Expired'
-
     const hours = Math.floor(diff / (1000 * 60 * 60))
     const days = Math.floor(hours / 24)
-
-    if (days > 0) return `${days}d ${hours % 24}h left`
-    if (hours > 0) return `${hours}h left`
-    return 'Less than 1h'
+    if (days > 0) return `${days}d ${hours % 24}h`
+    if (hours > 0) return `${hours}h`
+    return '<1h'
   }
 
-  // Get current price for an asset
-  const getCurrentPrice = (asset) => {
-    return prices[asset]?.price || null
-  }
+  // Get current price
+  const getPrice = (asset) => prices[asset]?.price || null
 
-  // Simulate CVD (Cumulative Volume Delta) validation
-  // In production, this would fetch real order book imbalance data
-  const getCVDValidation = (signal) => {
-    const currentPrice = getCurrentPrice(signal.asset)
-    if (!currentPrice) return null
-
+  // Calculate unrealized PnL
+  const getPnl = (signal) => {
+    const price = getPrice(signal.asset)
+    if (!price || signal.status === 'closed') return null
     const entry = parseFloat(signal.entry)
-    const priceDelta = ((currentPrice - entry) / entry) * 100
-
-    // CVD confirms if price movement aligns with trade direction
-    // LONG: positive if price is rising (CVD buying pressure)
-    // SHORT: positive if price is falling (CVD selling pressure)
-    const isConfirmed = signal.strategy === 'LONG'
-      ? priceDelta > -0.5  // LONG confirmed if not falling too much
-      : priceDelta < 0.5   // SHORT confirmed if not rising too much
-
-    return {
-      confirmed: isConfirmed,
-      delta: priceDelta.toFixed(2)
-    }
+    return signal.strategy === 'LONG'
+      ? ((price - entry) / entry) * 100
+      : ((entry - price) / entry) * 100
   }
 
-  // Calculate unrealized PnL for a trade
-  const getUnrealizedPnl = (signal) => {
-    const currentPrice = getCurrentPrice(signal.asset)
-    if (!currentPrice || signal.status === 'closed') return null
+  // Calculate egg PnL (capital-weighted)
+  const getEggPnl = (egg, status) => {
+    if (status.isExpired) return null
+    const activeSignals = signals.filter(s => egg.trades.includes(s.id) && s.status === 'active')
+    let weightedPnl = 0, totalCap = 0
 
-    const entry = parseFloat(signal.entry)
-    if (signal.strategy === 'LONG') {
-      return ((currentPrice - entry) / entry) * 100
-    } else {
-      return ((entry - currentPrice) / entry) * 100
-    }
-  }
-
-  // Calculate total unrealized PnL for an egg (capital-weighted)
-  const getEggUnrealizedPnl = (egg) => {
-    const eggSignals = signals.filter(s => egg.trades.includes(s.id) && s.status === 'active')
-    let totalWeightedPnl = 0
-    let totalCapital = 0
-    let hasPrice = false
-
-    eggSignals.forEach(signal => {
-      const pnl = getUnrealizedPnl(signal)
-      const capital = parseFloat(signal.capital) || (egg.totalCapital / egg.trades.length)
-
+    activeSignals.forEach(signal => {
+      const pnl = getPnl(signal)
+      const cap = parseFloat(signal.capital) || (egg.totalCapital / egg.trades.length)
       if (pnl !== null) {
-        // Weight PnL by capital allocation
-        totalWeightedPnl += (pnl / 100) * capital
-        totalCapital += capital
-        hasPrice = true
+        weightedPnl += (pnl / 100) * cap
+        totalCap += cap
       }
     })
 
-    // Return weighted percentage based on total capital
-    if (!hasPrice || totalCapital === 0) return null
-    return (totalWeightedPnl / totalCapital) * 100
+    return totalCap > 0 ? (weightedPnl / totalCap) * 100 : null
+  }
+
+  // CVD validation (simplified)
+  const getCVD = (signal) => {
+    const price = getPrice(signal.asset)
+    if (!price) return null
+    const delta = ((price - parseFloat(signal.entry)) / parseFloat(signal.entry)) * 100
+    return signal.strategy === 'LONG' ? delta > -0.5 : delta < 0.5
   }
 
   return (
@@ -121,17 +88,18 @@ export default function Incubator() {
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
+      className="pb-4"
     >
       <Header
         title="Incubator"
-        subtitle={`${filteredEggs.length} eggs ${activeFilter}`}
+        subtitle={`${filteredEggs.length} ${activeFilter}`}
       />
 
       {/* Filter Tabs */}
       <div className="px-4 py-3 flex gap-2">
         <button
           onClick={() => setActiveFilter('incubating')}
-          className={`flex-1 py-2.5 px-4 rounded-xl text-sm font-medium transition-all ${
+          className={`flex-1 py-2.5 rounded-xl text-sm font-medium transition-all ${
             activeFilter === 'incubating'
               ? 'bg-accent-cyan/20 text-accent-cyan border border-accent-cyan/30'
               : 'bg-quant-surface text-gray-400 border border-transparent'
@@ -141,7 +109,7 @@ export default function Incubator() {
         </button>
         <button
           onClick={() => setActiveFilter('hatched')}
-          className={`flex-1 py-2.5 px-4 rounded-xl text-sm font-medium transition-all flex items-center justify-center gap-2 ${
+          className={`flex-1 py-2.5 rounded-xl text-sm font-medium transition-all flex items-center justify-center gap-2 ${
             activeFilter === 'hatched'
               ? 'bg-accent-cyan/20 text-accent-cyan border border-accent-cyan/30'
               : 'bg-quant-surface text-gray-400 border border-transparent'
@@ -150,15 +118,35 @@ export default function Incubator() {
           <Archive size={16} />
           Hatched
         </button>
+        {/* Console Toggle */}
+        <button
+          onClick={() => setShowConsole(!showConsole)}
+          className={`p-2.5 rounded-xl transition-all ${
+            showConsole
+              ? 'bg-accent-purple/20 text-accent-purple border border-accent-purple/30'
+              : 'bg-quant-surface text-gray-400 border border-transparent'
+          }`}
+        >
+          <Activity size={16} />
+        </button>
       </div>
 
-      {/* Real-time Monitoring Console */}
-      <div className="px-4 pb-3">
-        <MonitoringConsole />
-      </div>
+      {/* Collapsible Console */}
+      <AnimatePresence>
+        {showConsole && (
+          <motion.div
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: 'auto', opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            className="px-4 pb-3 overflow-hidden"
+          >
+            <MonitoringConsole />
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* Eggs List */}
-      <div className="px-4 pb-4 space-y-3">
+      <div className="px-4 space-y-3">
         <AnimatePresence mode="popLayout">
           {filteredEggs.length === 0 ? (
             <motion.div
@@ -169,19 +157,18 @@ export default function Incubator() {
               <div className="w-20 h-20 mx-auto mb-4 rounded-full bg-quant-surface flex items-center justify-center">
                 <EggIcon size={48} status={activeFilter === 'incubating' ? 'incubating' : 'hatched'} />
               </div>
-              <p className="text-gray-400 mb-2">No {activeFilter} eggs</p>
+              <p className="text-gray-400 mb-1">No {activeFilter} eggs</p>
               <p className="text-sm text-gray-500">
-                {activeFilter === 'incubating'
-                  ? 'Tap + to create a new prompt and start incubating'
-                  : 'Hatched eggs will appear here'}
+                {activeFilter === 'incubating' ? 'Create a prompt to start' : 'Completed eggs appear here'}
               </p>
             </motion.div>
           ) : (
             filteredEggs.map((egg, index) => {
-              const progress = getEggProgress(egg)
+              const status = getEggStatus(egg)
               const eggSignals = signals.filter(s => egg.trades.includes(s.id))
               const isExpanded = expandedEgg === egg.id
-              const eggPnl = egg.status === 'incubating' && !progress.isExpired ? getEggUnrealizedPnl(egg) : null
+              const pnl = egg.status === 'incubating' ? getEggPnl(egg, status) : null
+              const timeLeft = formatTime(egg)
 
               return (
                 <motion.div
@@ -191,314 +178,209 @@ export default function Incubator() {
                   animate={{ opacity: 1, y: 0 }}
                   exit={{ opacity: 0, x: -100 }}
                   transition={{ delay: index * 0.05 }}
-                  className="bg-quant-card border border-quant-border rounded-2xl overflow-hidden card-hover"
+                  className="bg-quant-card border border-quant-border rounded-2xl overflow-hidden"
                 >
-                  {/* Main Content */}
-                  <div className="p-4">
-                    <div className="flex items-start gap-3">
-                      {/* Egg Icon */}
-                      <div className="relative">
+                  {/* Card Header */}
+                  <div
+                    className="p-4 cursor-pointer"
+                    onClick={() => setExpandedEgg(isExpanded ? null : egg.id)}
+                  >
+                    <div className="flex items-center gap-3">
+                      {/* Egg Icon with status indicator */}
+                      <div className="relative flex-shrink-0">
                         <EggIcon
-                          size={56}
+                          size={52}
                           status={egg.status}
                           winRate={egg.results?.winRate || 0}
                         />
-                        {egg.status === 'incubating' && progress.active > 0 && (
-                          <div className="absolute -bottom-1 -right-1 w-4 h-4 bg-accent-green rounded-full border-2 border-quant-card pulse-ring" />
+                        {status.active > 0 && !status.isExpired && (
+                          <div className="absolute -bottom-0.5 -right-0.5 w-3 h-3 bg-accent-green rounded-full border-2 border-quant-card animate-pulse" />
                         )}
                       </div>
 
                       {/* Content */}
                       <div className="flex-1 min-w-0">
-                        <div className="flex items-center justify-between">
-                          <h3 className="font-semibold text-white truncate">{egg.promptName}</h3>
-                          <div className="flex items-center gap-2">
-                            {/* Live PnL indicator for incubating eggs */}
-                            {eggPnl !== null && (
-                              <span className={`text-sm font-mono font-bold ${
-                                eggPnl >= 0 ? 'text-accent-green' : 'text-accent-red'
-                              }`}>
-                                {eggPnl >= 0 ? '+' : ''}{eggPnl.toFixed(2)}%
-                              </span>
-                            )}
-                            <button
-                              onClick={() => setExpandedEgg(isExpanded ? null : egg.id)}
-                              className="p-1.5 rounded-lg hover:bg-quant-surface transition-colors"
-                            >
-                              {isExpanded ? (
-                                <ChevronUp size={18} className="text-gray-400" />
-                              ) : (
-                                <ChevronDown size={18} className="text-gray-400" />
-                              )}
-                            </button>
-                          </div>
-                        </div>
-
-                        {/* Meta info */}
-                        <div className="flex items-center gap-2 mt-1">
-                          <span className="text-xs px-2 py-0.5 rounded-full bg-accent-cyan/20 text-accent-cyan">
-                            {progress.total} trades
-                          </span>
-                          <span className="text-xs text-gray-500 flex items-center gap-1">
-                            <Clock size={12} />
-                            {getTimeRemaining(egg)}
-                          </span>
-                          {priceStatus.lastUpdated && egg.status === 'incubating' && !progress.isExpired && (
-                            <span className="text-[10px] text-gray-600 flex items-center gap-1">
-                              <span className="w-1 h-1 bg-accent-green rounded-full animate-pulse" />
-                              Live
-                            </span>
-                          )}
-                          {progress.isExpired && (
-                            <span className="text-[10px] text-accent-orange flex items-center gap-1">
-                              <Clock size={10} />
-                              Expired
+                        {/* Title row */}
+                        <div className="flex items-center justify-between gap-2">
+                          <h3 className="font-semibold text-white truncate text-base">{egg.promptName}</h3>
+                          {pnl !== null && (
+                            <span className={`text-lg font-mono font-bold flex-shrink-0 ${
+                              pnl >= 0 ? 'text-accent-green' : 'text-accent-red'
+                            }`}>
+                              {pnl >= 0 ? '+' : ''}{pnl.toFixed(2)}%
                             </span>
                           )}
                         </div>
 
-                        {/* Progress Bar */}
-                        <div className="mt-3">
-                          <div className="flex justify-between text-xs mb-1">
-                            {progress.isExpired ? (
-                              <>
-                                <span className="text-accent-orange flex items-center gap-1">
-                                  <span className="w-1.5 h-1.5 rounded-full bg-accent-orange" />
-                                  {progress.expired} Expired
-                                </span>
-                                <span className="text-gray-400">|</span>
-                                <span className={progress.closed > 0 ? 'text-accent-green' : 'text-gray-500'}>
-                                  {progress.closed} Closed
-                                </span>
-                              </>
-                            ) : (
-                              <>
-                                <span className="text-accent-cyan flex items-center gap-1">
-                                  {progress.active > 0 && (
-                                    <span className="w-1.5 h-1.5 rounded-full bg-accent-cyan animate-pulse" />
-                                  )}
-                                  {progress.active} Open
-                                </span>
-                                <span className="text-gray-400">|</span>
-                                <span className={progress.closed > 0 ? 'text-accent-green' : 'text-gray-500'}>
-                                  {progress.closed} Closed
-                                </span>
-                              </>
-                            )}
-                          </div>
-                          <div className="h-2 bg-quant-surface rounded-full overflow-hidden">
-                            <motion.div
-                              initial={{ width: 0 }}
-                              animate={{ width: `${progress.percentage}%` }}
-                              className="h-full bg-gradient-to-r from-accent-cyan to-accent-green rounded-full"
-                            />
-                          </div>
+                        {/* Status row - single line */}
+                        <div className="flex items-center gap-3 mt-1.5 text-xs text-gray-400">
+                          {/* Progress fraction */}
+                          <span className={status.isExpired ? 'text-accent-orange' : 'text-accent-cyan'}>
+                            {status.isExpired ? `${status.total - status.closed} expired` : `${status.active} open`}
+                            <span className="text-gray-500 mx-1">·</span>
+                            <span className="text-gray-400">{status.closed}/{status.total} closed</span>
+                          </span>
+
+                          {/* Time */}
+                          {timeLeft && (
+                            <>
+                              <span className="text-gray-600">|</span>
+                              <span className={`flex items-center gap-1 ${
+                                timeLeft === 'Expired' ? 'text-accent-orange' : ''
+                              }`}>
+                                <Clock size={11} />
+                                {timeLeft}
+                              </span>
+                            </>
+                          )}
                         </div>
 
-                        {/* Results (for hatched eggs) */}
-                        {egg.status === 'hatched' && egg.results && (
-                          <div className="grid grid-cols-4 gap-2 mt-3">
-                            <div className="bg-quant-surface/50 rounded-lg p-2 text-center">
-                              <span className="text-xs text-gray-500 block">Trades</span>
-                              <span className="text-sm font-mono text-white">{egg.results.totalTrades}</span>
-                            </div>
-                            <div className="bg-quant-surface/50 rounded-lg p-2 text-center">
-                              <span className="text-xs text-gray-500 block">Win</span>
-                              <span className={`text-sm font-mono ${
-                                egg.results.winRate >= 50 ? 'text-accent-green' : 'text-accent-red'
-                              }`}>
-                                {egg.results.winRate}%
-                              </span>
-                            </div>
-                            <div className="bg-quant-surface/50 rounded-lg p-2 text-center">
-                              <span className="text-xs text-gray-500 block">PF</span>
-                              <span className={`text-sm font-mono ${
-                                egg.results.profitFactor >= 1 ? 'text-accent-green' : 'text-accent-red'
-                              }`}>
-                                {egg.results.profitFactor === Infinity ? '∞' : egg.results.profitFactor.toFixed(1)}
-                              </span>
-                            </div>
-                            <div className="bg-quant-surface/50 rounded-lg p-2 text-center">
-                              <span className="text-xs text-gray-500 block">PnL</span>
-                              <span className={`text-sm font-mono ${
-                                egg.results.totalPnl >= 0 ? 'text-accent-green' : 'text-accent-red'
-                              }`}>
-                                {egg.results.totalPnl >= 0 ? '+' : ''}{egg.results.totalPnl.toFixed(0)}
-                              </span>
-                            </div>
-                          </div>
-                        )}
+                        {/* Progress bar - minimal */}
+                        <div className="mt-3 h-1.5 bg-quant-surface rounded-full overflow-hidden">
+                          <motion.div
+                            initial={{ width: 0 }}
+                            animate={{ width: `${status.progress}%` }}
+                            className={`h-full rounded-full ${
+                              status.isExpired
+                                ? 'bg-accent-orange'
+                                : 'bg-gradient-to-r from-accent-cyan to-accent-green'
+                            }`}
+                          />
+                        </div>
+                      </div>
+
+                      {/* Expand indicator */}
+                      <div className="flex-shrink-0 text-gray-500">
+                        {isExpanded ? <ChevronUp size={20} /> : <ChevronDown size={20} />}
                       </div>
                     </div>
+
+                    {/* Hatched results */}
+                    {egg.status === 'hatched' && egg.results && (
+                      <div className="grid grid-cols-4 gap-2 mt-4 pt-3 border-t border-quant-border">
+                        {[
+                          { label: 'Trades', value: egg.results.totalTrades, color: 'text-white' },
+                          { label: 'Win Rate', value: `${egg.results.winRate}%`, color: egg.results.winRate >= 50 ? 'text-accent-green' : 'text-accent-red' },
+                          { label: 'PF', value: egg.results.profitFactor === Infinity ? '∞' : egg.results.profitFactor.toFixed(1), color: egg.results.profitFactor >= 1 ? 'text-accent-green' : 'text-accent-red' },
+                          { label: 'PnL', value: `${egg.results.totalPnl >= 0 ? '+' : ''}${egg.results.totalPnl.toFixed(0)}`, color: egg.results.totalPnl >= 0 ? 'text-accent-green' : 'text-accent-red' }
+                        ].map(stat => (
+                          <div key={stat.label} className="text-center">
+                            <span className="text-[10px] text-gray-500 uppercase block">{stat.label}</span>
+                            <span className={`text-sm font-mono ${stat.color}`}>{stat.value}</span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
                   </div>
 
-                  {/* Expanded Trades List */}
+                  {/* Expanded Trades */}
                   <AnimatePresence>
                     {isExpanded && (
                       <motion.div
                         initial={{ height: 0, opacity: 0 }}
                         animate={{ height: 'auto', opacity: 1 }}
                         exit={{ height: 0, opacity: 0 }}
-                        className="border-t border-quant-border"
+                        className="border-t border-quant-border overflow-hidden"
                       >
-                        <div className="p-3 space-y-2 bg-quant-surface/30">
-                          <span className="text-xs text-gray-500 uppercase tracking-wider">Trades in this egg</span>
+                        <div className="p-3 space-y-2 bg-quant-surface/20">
                           {eggSignals.map((signal) => {
                             const isLong = signal.strategy === 'LONG'
                             const isClosed = signal.status === 'closed'
-                            const currentPrice = getCurrentPrice(signal.asset)
-                            const unrealizedPnl = getUnrealizedPnl(signal)
-                            const cvd = !isClosed ? getCVDValidation(signal) : null
+                            const price = getPrice(signal.asset)
+                            const unrealizedPnl = getPnl(signal)
+                            const cvdOk = !isClosed && !status.isExpired ? getCVD(signal) : null
 
                             return (
                               <div
                                 key={signal.id}
-                                className={`bg-quant-card rounded-xl p-3 border ${
+                                className={`rounded-xl p-3 ${
                                   isClosed
                                     ? signal.result === 'win'
-                                      ? 'border-accent-green/30'
-                                      : 'border-accent-red/30'
-                                    : 'border-quant-border'
+                                      ? 'bg-accent-green/5 border border-accent-green/20'
+                                      : 'bg-accent-red/5 border border-accent-red/20'
+                                    : 'bg-quant-card border border-quant-border'
                                 }`}
                               >
+                                {/* Trade header */}
                                 <div className="flex items-center justify-between">
                                   <div className="flex items-center gap-2">
-                                    <div className={`p-1.5 rounded-lg ${
-                                      isLong ? 'bg-accent-green/20' : 'bg-accent-red/20'
-                                    }`}>
-                                      {isLong ? (
-                                        <TrendingUp size={14} className="text-accent-green" />
-                                      ) : (
-                                        <TrendingDown size={14} className="text-accent-red" />
-                                      )}
-                                    </div>
-                                    <div className="flex items-center gap-1.5">
-                                      <span className="text-sm font-medium text-white">{signal.asset}</span>
-                                      {/* CVD Validation Indicator */}
-                                      {cvd && (
-                                        <span
-                                          className={`w-2 h-2 rounded-full ${
-                                            cvd.confirmed ? 'bg-accent-green' : 'bg-accent-red'
-                                          }`}
-                                          title={`CVD ${cvd.confirmed ? 'confirms' : 'diverges'} (${cvd.delta}%)`}
-                                        />
-                                      )}
-                                      <span className={`ml-1 text-xs ${
-                                        isLong ? 'text-accent-green' : 'text-accent-red'
-                                      }`}>
-                                        {signal.strategy}
-                                      </span>
-                                    </div>
-                                  </div>
-
-                                  <div className="text-right">
-                                    {isClosed ? (
-                                      <span className={`text-sm font-mono font-bold ${
-                                        signal.result === 'win' ? 'text-accent-green' : 'text-accent-red'
-                                      }`}>
-                                        {signal.pnl >= 0 ? '+' : ''}{signal.pnl?.toFixed(2) || '0.00'}
-                                      </span>
-                                    ) : unrealizedPnl !== null ? (
-                                      <span className={`text-sm font-mono font-bold ${
-                                        unrealizedPnl >= 0 ? 'text-accent-green' : 'text-accent-red'
-                                      }`}>
-                                        {unrealizedPnl >= 0 ? '+' : ''}{unrealizedPnl.toFixed(2)}%
-                                      </span>
+                                    {isLong ? (
+                                      <TrendingUp size={16} className="text-accent-green" />
                                     ) : (
-                                      <span className="text-xs text-accent-cyan flex items-center gap-1">
-                                        <span className="w-1.5 h-1.5 bg-accent-cyan rounded-full animate-pulse" />
-                                        Active
-                                      </span>
+                                      <TrendingDown size={16} className="text-accent-red" />
+                                    )}
+                                    <span className="font-medium text-white">{signal.asset}</span>
+                                    {cvdOk !== null && (
+                                      <span className={`w-1.5 h-1.5 rounded-full ${cvdOk ? 'bg-accent-green' : 'bg-accent-red'}`} />
                                     )}
                                   </div>
+
+                                  {/* PnL display */}
+                                  {isClosed ? (
+                                    <span className={`font-mono font-bold ${
+                                      signal.result === 'win' ? 'text-accent-green' : 'text-accent-red'
+                                    }`}>
+                                      {signal.pnl >= 0 ? '+' : ''}{signal.pnl?.toFixed(2) || '0.00'}%
+                                    </span>
+                                  ) : unrealizedPnl !== null ? (
+                                    <span className={`font-mono font-bold ${
+                                      unrealizedPnl >= 0 ? 'text-accent-green' : 'text-accent-red'
+                                    }`}>
+                                      {unrealizedPnl >= 0 ? '+' : ''}{unrealizedPnl.toFixed(2)}%
+                                    </span>
+                                  ) : status.isExpired ? (
+                                    <span className="text-xs text-accent-orange">Expired</span>
+                                  ) : (
+                                    <span className="text-xs text-gray-500">Waiting...</span>
+                                  )}
                                 </div>
 
-                                <div className="flex items-center justify-between mt-2 text-xs">
-                                  <span className="text-gray-500">
-                                    Entry: <span className="text-white font-mono">${signal.entry}</span>
+                                {/* Price levels - compact */}
+                                <div className="flex items-center gap-4 mt-2 text-xs font-mono">
+                                  <span className="text-gray-400">
+                                    E <span className="text-white">{parseFloat(signal.entry).toFixed(2)}</span>
                                   </span>
-                                  {/* Current price if available */}
-                                  {currentPrice && !isClosed && (
-                                    <span className="text-accent-cyan flex items-center gap-1">
-                                      <DollarSign size={10} />
-                                      <span className="font-mono">{currentPrice.toFixed(2)}</span>
+                                  {price && !isClosed && (
+                                    <span className="text-accent-cyan">
+                                      Now {price.toFixed(2)}
                                     </span>
                                   )}
-                                  <span className="text-accent-green">
-                                    TP: ${signal.takeProfit}
+                                  <span className="text-accent-green ml-auto">
+                                    TP {parseFloat(signal.takeProfit).toFixed(2)}
                                   </span>
                                   <span className="text-accent-red">
-                                    SL: ${signal.stopLoss}
+                                    SL {parseFloat(signal.stopLoss).toFixed(2)}
                                   </span>
                                 </div>
 
-                                {/* Progress to TP/SL */}
-                                {currentPrice && !isClosed && (
+                                {/* Progress bar - only for active trades */}
+                                {price && !isClosed && !status.isExpired && (
                                   <div className="mt-2">
                                     {(() => {
                                       const entry = parseFloat(signal.entry)
                                       const tp = parseFloat(signal.takeProfit)
                                       const sl = parseFloat(signal.stopLoss)
-
-                                      // Universal formula: (current - sl) / (tp - sl)
-                                      // Works for both LONG and SHORT:
-                                      // - LONG: SL < Entry < TP, denominator positive
-                                      // - SHORT: TP < Entry < SL, denominator negative (auto-inverts)
                                       const range = tp - sl
-
-                                      // Raw percentages (can exceed 0-100 if past TP/SL)
-                                      const progressRaw = ((currentPrice - sl) / range) * 100
+                                      const progressRaw = ((price - sl) / range) * 100
                                       const entryRaw = ((entry - sl) / range) * 100
-
-                                      // Clamp for display
-                                      const progressPercent = Math.max(0, Math.min(100, progressRaw))
-                                      const entryPercent = Math.max(0, Math.min(100, entryRaw))
-
-                                      // In profit when progress > entry (toward TP)
-                                      const isInProfit = progressRaw > entryRaw
-
-                                      // For display: always show lower price on left, higher on right
-                                      const leftPrice = Math.min(sl, tp)
-                                      const rightPrice = Math.max(sl, tp)
-                                      const leftLabel = sl < tp ? 'SL' : 'TP'
-                                      const rightLabel = sl < tp ? 'TP' : 'SL'
-                                      const leftColor = sl < tp ? 'text-accent-red' : 'text-accent-green'
-                                      const rightColor = sl < tp ? 'text-accent-green' : 'text-accent-red'
-
-                                      // For SHORT, we need to flip the visual since lower prices are on left
-                                      const displayProgress = isLong ? progressPercent : (100 - progressPercent)
-                                      const displayEntry = isLong ? entryPercent : (100 - entryPercent)
+                                      const progress = Math.max(0, Math.min(100, isLong ? progressRaw : (100 - progressRaw)))
+                                      const entryPos = Math.max(0, Math.min(100, isLong ? entryRaw : (100 - entryRaw)))
+                                      const isProfit = progressRaw > entryRaw
 
                                       return (
-                                        <>
-                                          <div className="h-1.5 bg-quant-surface rounded-full overflow-hidden relative">
-                                            {/* Entry marker - white vertical line */}
-                                            <div
-                                              className="absolute top-0 bottom-0 w-0.5 bg-white z-10"
-                                              style={{ left: `${displayEntry}%` }}
-                                            />
-                                            {/* Progress bar */}
-                                            <motion.div
-                                              initial={{ width: 0 }}
-                                              animate={{ width: `${displayProgress}%` }}
-                                              className={`h-full ${
-                                                isInProfit
-                                                  ? 'bg-gradient-to-r from-accent-cyan to-accent-green'
-                                                  : 'bg-gradient-to-r from-accent-red to-accent-orange'
-                                              }`}
-                                            />
-                                          </div>
-                                          <div className="flex justify-between text-[10px] mt-0.5 relative">
-                                            <span className={leftColor}>{leftLabel} ${leftPrice.toFixed(2)}</span>
-                                            <span
-                                              className="text-white absolute font-bold"
-                                              style={{ left: `${displayEntry}%`, transform: 'translateX(-50%)' }}
-                                            >
-                                              E
-                                            </span>
-                                            <span className={rightColor}>{rightLabel} ${rightPrice.toFixed(2)}</span>
-                                          </div>
-                                        </>
+                                        <div className="h-1 bg-quant-surface rounded-full relative">
+                                          <div
+                                            className="absolute top-0 bottom-0 w-0.5 bg-white/60 z-10"
+                                            style={{ left: `${entryPos}%` }}
+                                          />
+                                          <motion.div
+                                            initial={{ width: 0 }}
+                                            animate={{ width: `${progress}%` }}
+                                            className={`h-full rounded-full ${
+                                              isProfit ? 'bg-accent-green' : 'bg-accent-red'
+                                            }`}
+                                          />
+                                        </div>
                                       )
                                     })()}
                                   </div>
