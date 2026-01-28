@@ -25,7 +25,13 @@ export default function Incubator() {
   const { eggs, signals, prices, priceStatus } = useStore()
   const [activeFilter, setActiveFilter] = useState('live')
   const [expandedEgg, setExpandedEgg] = useState(null)
+  const [expandedConfig, setExpandedConfig] = useState({}) // Track expanded config per egg
   const [showConsole, setShowConsole] = useState(false)
+
+  // Toggle config expansion for an egg
+  const toggleConfigExpand = (eggId) => {
+    setExpandedConfig(prev => ({ ...prev, [eggId]: !prev[eggId] }))
+  }
 
   // Check if egg is expired
   const isEggExpired = (egg) => egg.expiresAt && new Date(egg.expiresAt) <= new Date()
@@ -393,7 +399,7 @@ export default function Incubator() {
                         className="border-t border-quant-border overflow-hidden"
                       >
                         <div className="p-3 space-y-4 bg-quant-surface/20">
-                          {/* Configuration Section - Clean & Simple */}
+                          {/* Configuration Section - Collapsible Accordion */}
                           {(() => {
                             // Create fallback config for old eggs without config
                             const baseConfig = egg.config || {
@@ -419,41 +425,69 @@ export default function Incubator() {
                             const potentialGain = config.targetPct ? (config.capital * config.targetPct / 100) : 0
                             const finalAmount = config.capital + potentialGain
                             const priceMove = config.targetPct ? (config.targetPct / config.leverage) : 0
+                            const isConfigExpanded = expandedConfig[egg.id]
 
                             return (
-                            <div className="bg-quant-card rounded-xl p-4 border border-quant-border">
-                              {/* Main: Simple transformation display */}
-                              <div className="text-center mb-4">
-                                <div className="flex items-center justify-center gap-3 mb-2">
-                                  <span className="text-2xl font-bold text-white font-mono">${config.capital.toLocaleString()}</span>
+                            <div className="bg-quant-card rounded-xl border border-quant-border overflow-hidden">
+                              {/* Collapsed Header - Always visible */}
+                              <button
+                                onClick={() => toggleConfigExpand(egg.id)}
+                                className="w-full px-4 py-3 flex items-center justify-between hover:bg-quant-surface/50 transition-colors"
+                              >
+                                <div className="flex items-center gap-3">
+                                  <DollarSign size={16} className="text-accent-cyan" />
+                                  <span className="font-mono text-white font-medium">
+                                    ${config.capital.toLocaleString()}
+                                  </span>
                                   <span className="text-gray-500">→</span>
-                                  <span className="text-2xl font-bold text-accent-green font-mono">${finalAmount.toLocaleString()}</span>
+                                  <span className="font-mono text-accent-green font-medium">
+                                    ${finalAmount.toLocaleString()}
+                                  </span>
+                                  {config.targetPct > 0 && (
+                                    <span className="text-xs px-2 py-0.5 rounded-full bg-accent-green/10 text-accent-green font-medium">
+                                      +{config.targetPct}%
+                                    </span>
+                                  )}
                                 </div>
-                                {config.targetPct > 0 && (
-                                  <div className="inline-block px-3 py-1 rounded-full bg-accent-green/10 border border-accent-green/30">
-                                    <span className="text-accent-green font-bold">+{config.targetPct}% ganancia</span>
-                                  </div>
+                                <ChevronDown
+                                  size={18}
+                                  className={`text-gray-500 transition-transform ${isConfigExpanded ? 'rotate-180' : ''}`}
+                                />
+                              </button>
+
+                              {/* Expanded Content */}
+                              <AnimatePresence>
+                                {isConfigExpanded && (
+                                  <motion.div
+                                    initial={{ height: 0, opacity: 0 }}
+                                    animate={{ height: 'auto', opacity: 1 }}
+                                    exit={{ height: 0, opacity: 0 }}
+                                    transition={{ duration: 0.2 }}
+                                    className="overflow-hidden"
+                                  >
+                                    <div className="px-4 pb-4 pt-2 border-t border-quant-border">
+                                      {/* Explanation */}
+                                      {config.targetPct > 0 && (
+                                        <div className="text-center text-sm text-gray-400 mb-3">
+                                          Con <span className="text-white font-medium">{config.leverage}x</span> leverage,
+                                          solo necesitas <span className="text-accent-cyan font-medium">{priceMove.toFixed(1)}%</span> de movimiento
+                                        </div>
+                                      )}
+
+                                      {/* Config Pills Row */}
+                                      <div className="flex items-center justify-center gap-3 text-[10px] text-gray-500">
+                                        <span>{EXECUTION_LABELS[config.executionTime] || config.executionTime}</span>
+                                        <span>•</span>
+                                        <span>{AI_MODEL_LABELS[config.aiModel]?.icon} {AI_MODEL_LABELS[config.aiModel]?.name || config.aiModel}</span>
+                                        <span>•</span>
+                                        <span>IPE {config.minIpe}%</span>
+                                        <span>•</span>
+                                        <span>{config.numResults} trade{config.numResults !== 1 ? 's' : ''}</span>
+                                      </div>
+                                    </div>
+                                  </motion.div>
                                 )}
-                              </div>
-
-                              {/* Explanation - Super simple */}
-                              {config.targetPct > 0 && (
-                                <div className="text-center text-sm text-gray-400 mb-4 px-2">
-                                  Con <span className="text-white font-medium">{config.leverage}x</span> leverage,
-                                  solo necesitas <span className="text-accent-cyan font-medium">{priceMove.toFixed(1)}%</span> de movimiento
-                                </div>
-                              )}
-
-                              {/* Config Pills Row */}
-                              <div className="flex items-center justify-center gap-3 text-[10px] text-gray-500">
-                                <span>{EXECUTION_LABELS[config.executionTime] || config.executionTime}</span>
-                                <span>•</span>
-                                <span>{AI_MODEL_LABELS[config.aiModel]?.icon} {AI_MODEL_LABELS[config.aiModel]?.name || config.aiModel}</span>
-                                <span>•</span>
-                                <span>IPE {config.minIpe}%</span>
-                                <span>•</span>
-                                <span>{config.numResults} trade{config.numResults !== 1 ? 's' : ''}</span>
-                              </div>
+                              </AnimatePresence>
                             </div>
                           )})()}
 
