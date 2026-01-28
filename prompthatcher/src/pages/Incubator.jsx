@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useMemo } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Archive, Clock, TrendingUp, TrendingDown, ChevronDown, ChevronUp, Activity, DollarSign, Zap, Cpu, Target, Hash, Radio, Filter, ArrowUpDown } from 'lucide-react'
 import useStore from '../store/useStore'
@@ -110,50 +110,52 @@ export default function Incubator() {
   }
 
   // Filter eggs: Live (active & not expired) vs Completed (hatched or expired)
-  const filteredEggs = eggs
-    .filter(e => {
-      const expired = isEggExpired(e)
-      if (activeFilter === 'live') {
-        return e.status === 'incubating' && !expired
-      } else {
-        // Completed tab shows: naturally hatched OR expired eggs
-        const isCompleted = e.status === 'hatched' || (e.status === 'incubating' && expired)
-        if (!isCompleted) return false
+  const filteredEggs = useMemo(() => {
+    return eggs
+      .filter(e => {
+        const expired = isEggExpired(e)
+        if (activeFilter === 'live') {
+          return e.status === 'incubating' && !expired
+        } else {
+          // Completed tab shows: naturally hatched OR expired eggs
+          const isCompleted = e.status === 'hatched' || (e.status === 'incubating' && expired)
+          if (!isCompleted) return false
 
-        // Apply sub-filter for completed tab
-        const results = getEggResults(e)
-        switch (filterBy) {
-          case 'profitable':
-            return results.totalPnl >= 0
-          case 'unprofitable':
-            return results.totalPnl < 0
-          case 'hatched':
-            return e.status === 'hatched'
-          case 'expired':
-            return e.status === 'incubating' && expired
-          default:
-            return true
+          // Apply sub-filter for completed tab
+          const results = getEggResults(e)
+          switch (filterBy) {
+            case 'profitable':
+              return results.totalPnl >= 0
+            case 'unprofitable':
+              return results.totalPnl < 0
+            case 'hatched':
+              return e.status === 'hatched'
+            case 'expired':
+              return e.status === 'incubating' && expired
+            default:
+              return true
+          }
         }
-      }
-    })
-    .map(e => ({
-      ...e,
-      _results: getEggResults(e),
-      _pnl: getEggPnlForSort(e) // Real-time PnL for sorting
-    }))
-    .sort((a, b) => {
-      switch (sortBy) {
-        case 'pnl':
-          return b._pnl - a._pnl // Use real-time PnL
-        case 'winRate':
-          return b._results.winRate - a._results.winRate
-        case 'trades':
-          return b._results.totalTrades - a._results.totalTrades
-        case 'recent':
-        default:
-          return new Date(b.createdAt) - new Date(a.createdAt)
-      }
-    })
+      })
+      .map(e => ({
+        ...e,
+        _results: getEggResults(e),
+        _pnl: getEggPnlForSort(e) // Real-time PnL for sorting
+      }))
+      .sort((a, b) => {
+        switch (sortBy) {
+          case 'pnl':
+            return b._pnl - a._pnl // Use real-time PnL
+          case 'winRate':
+            return b._results.winRate - a._results.winRate
+          case 'trades':
+            return b._results.totalTrades - a._results.totalTrades
+          case 'recent':
+          default:
+            return new Date(b.createdAt) - new Date(a.createdAt)
+        }
+      })
+  }, [eggs, signals, prices, activeFilter, filterBy, sortBy])
 
   // Get egg status info
   const getEggStatus = (egg) => {
@@ -182,9 +184,6 @@ export default function Incubator() {
     if (hours > 0) return `${hours}h`
     return '<1h'
   }
-
-  // Get current price
-  const getPrice = (asset) => prices[asset]?.price || null
 
   // Calculate unrealized PnL
   const getPnl = (signal) => {
