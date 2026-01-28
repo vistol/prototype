@@ -419,9 +419,29 @@ const useStore = create(
       resetOnboarding: () => set({ onboardingCompleted: false }),
 
       // Reset all data (for fresh start)
-      resetAllData: () => {
+      resetAllData: async () => {
+        const client = get().getClient()
+
+        // Clear cloud data first if connected
+        if (client) {
+          try {
+            // Delete all data from Supabase tables
+            await Promise.all([
+              client.from('prompts').delete().neq('id', ''),
+              client.from('signals').delete().neq('id', ''),
+              client.from('eggs').delete().neq('id', ''),
+              client.from('settings').delete().neq('id', '')
+            ])
+          } catch (err) {
+            console.error('Failed to clear cloud data:', err)
+          }
+        }
+
         // Clear localStorage
         localStorage.removeItem('prompthatcher-storage')
+
+        // Set a reset flag to prevent cloud reload
+        localStorage.setItem('prompthatcher-reset-pending', 'true')
 
         // Reset all state to initial values
         set({
@@ -1084,6 +1104,15 @@ If no truly new strategy can be generated, you must invent a new angle rather th
       initializeFromCloud: async () => {
         const state = get()
         const client = state.getClient()
+
+        // Check if a reset was just performed - skip cloud load
+        const resetPending = localStorage.getItem('prompthatcher-reset-pending')
+        if (resetPending) {
+          localStorage.removeItem('prompthatcher-reset-pending')
+          set({ isCloudInitialized: true })
+          get().addLog('system', 'Fresh start - skipping cloud data load')
+          return { success: true, freshStart: true }
+        }
 
         if (!client) {
           // No Supabase configured, use empty state

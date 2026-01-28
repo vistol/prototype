@@ -92,6 +92,7 @@ export default function Settings() {
     keepLinkedData: true
   })
   const [deleteResult, setDeleteResult] = useState(null)
+  const [isResetting, setIsResetting] = useState(false)
 
   // Get current data counts
   const dataCounts = getDataCounts()
@@ -1170,13 +1171,21 @@ export default function Settings() {
                          deleteOptions.deleteSignals && deleteOptions.deleteLogs &&
                          deleteOptions.resetOnboarding && !deleteOptions.keepLinkedData ? (
                           <button
-                            onClick={() => {
-                              setShowResetConfirm(false)
-                              resetAllData()
+                            onClick={async () => {
+                              setIsResetting(true)
+                              await resetAllData()
                             }}
-                            className="flex-1 py-3 rounded-xl bg-accent-red text-white font-medium hover:bg-accent-red/80 transition-colors"
+                            disabled={isResetting}
+                            className="flex-1 py-3 rounded-xl bg-accent-red text-white font-medium hover:bg-accent-red/80 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
                           >
-                            Reset Everything
+                            {isResetting ? (
+                              <>
+                                <RefreshCw size={16} className="animate-spin" />
+                                Resetting...
+                              </>
+                            ) : (
+                              'Reset Everything'
+                            )}
                           </button>
                         ) : (
                           <button
