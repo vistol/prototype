@@ -18,10 +18,20 @@ export default function Incubator() {
   const getEggProgress = (egg) => {
     const eggSignals = signals.filter(s => egg.trades.includes(s.id))
     const closedCount = eggSignals.filter(s => s.status === 'closed').length
+
+    // Check if egg has expired
+    const isExpired = egg.expiresAt && new Date(egg.expiresAt) <= new Date()
+
+    // If expired, all non-closed trades are considered "expired" (not open)
+    const activeCount = isExpired ? 0 : (eggSignals.length - closedCount)
+    const expiredCount = isExpired ? (eggSignals.length - closedCount) : 0
+
     return {
       total: eggSignals.length,
       closed: closedCount,
-      active: eggSignals.length - closedCount,
+      active: activeCount,
+      expired: expiredCount,
+      isExpired,
       percentage: eggSignals.length > 0 ? (closedCount / eggSignals.length) * 100 : 0
     }
   }
@@ -171,7 +181,7 @@ export default function Incubator() {
               const progress = getEggProgress(egg)
               const eggSignals = signals.filter(s => egg.trades.includes(s.id))
               const isExpanded = expandedEgg === egg.id
-              const eggPnl = egg.status === 'incubating' ? getEggUnrealizedPnl(egg) : null
+              const eggPnl = egg.status === 'incubating' && !progress.isExpired ? getEggUnrealizedPnl(egg) : null
 
               return (
                 <motion.div
@@ -233,10 +243,16 @@ export default function Incubator() {
                             <Clock size={12} />
                             {getTimeRemaining(egg)}
                           </span>
-                          {priceStatus.lastUpdated && egg.status === 'incubating' && (
+                          {priceStatus.lastUpdated && egg.status === 'incubating' && !progress.isExpired && (
                             <span className="text-[10px] text-gray-600 flex items-center gap-1">
                               <span className="w-1 h-1 bg-accent-green rounded-full animate-pulse" />
                               Live
+                            </span>
+                          )}
+                          {progress.isExpired && (
+                            <span className="text-[10px] text-accent-orange flex items-center gap-1">
+                              <Clock size={10} />
+                              Expired
                             </span>
                           )}
                         </div>
@@ -244,16 +260,31 @@ export default function Incubator() {
                         {/* Progress Bar */}
                         <div className="mt-3">
                           <div className="flex justify-between text-xs mb-1">
-                            <span className="text-accent-cyan flex items-center gap-1">
-                              {progress.active > 0 && (
-                                <span className="w-1.5 h-1.5 rounded-full bg-accent-cyan animate-pulse" />
-                              )}
-                              {progress.active} Open
-                            </span>
-                            <span className="text-gray-400">|</span>
-                            <span className={progress.closed > 0 ? 'text-accent-green' : 'text-gray-500'}>
-                              {progress.closed} Closed
-                            </span>
+                            {progress.isExpired ? (
+                              <>
+                                <span className="text-accent-orange flex items-center gap-1">
+                                  <span className="w-1.5 h-1.5 rounded-full bg-accent-orange" />
+                                  {progress.expired} Expired
+                                </span>
+                                <span className="text-gray-400">|</span>
+                                <span className={progress.closed > 0 ? 'text-accent-green' : 'text-gray-500'}>
+                                  {progress.closed} Closed
+                                </span>
+                              </>
+                            ) : (
+                              <>
+                                <span className="text-accent-cyan flex items-center gap-1">
+                                  {progress.active > 0 && (
+                                    <span className="w-1.5 h-1.5 rounded-full bg-accent-cyan animate-pulse" />
+                                  )}
+                                  {progress.active} Open
+                                </span>
+                                <span className="text-gray-400">|</span>
+                                <span className={progress.closed > 0 ? 'text-accent-green' : 'text-gray-500'}>
+                                  {progress.closed} Closed
+                                </span>
+                              </>
+                            )}
                           </div>
                           <div className="h-2 bg-quant-surface rounded-full overflow-hidden">
                             <motion.div
