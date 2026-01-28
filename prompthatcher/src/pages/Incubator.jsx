@@ -1,27 +1,42 @@
 import { useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Archive, Clock, TrendingUp, TrendingDown, ChevronDown, ChevronUp, Activity } from 'lucide-react'
+import { Archive, Clock, TrendingUp, TrendingDown, ChevronDown, ChevronUp, Activity, DollarSign, Zap, Cpu, Target, Hash, Radio } from 'lucide-react'
 import useStore from '../store/useStore'
 import Header from '../components/Header'
 import EggIcon from '../components/EggIcon'
 import MonitoringConsole from '../components/MonitoringConsole'
 
+// Execution time labels
+const EXECUTION_LABELS = {
+  target: 'Target Based',
+  scalping: 'Scalping',
+  intraday: 'Intraday',
+  swing: 'Swing'
+}
+
+// AI Model labels
+const AI_MODEL_LABELS = {
+  gemini: { name: 'Gemini', icon: '🔮' },
+  openai: { name: 'GPT-4', icon: '🤖' },
+  grok: { name: 'Grok', icon: '⚡' }
+}
+
 export default function Incubator() {
   const { eggs, signals, prices, priceStatus } = useStore()
-  const [activeFilter, setActiveFilter] = useState('incubating')
+  const [activeFilter, setActiveFilter] = useState('live')
   const [expandedEgg, setExpandedEgg] = useState(null)
   const [showConsole, setShowConsole] = useState(false)
 
   // Check if egg is expired
   const isEggExpired = (egg) => egg.expiresAt && new Date(egg.expiresAt) <= new Date()
 
-  // Filter eggs: Incubating (active & not expired) vs Hatched (completed or expired)
+  // Filter eggs: Live (active & not expired) vs Completed (hatched or expired)
   const filteredEggs = eggs.filter(e => {
     const expired = isEggExpired(e)
-    if (activeFilter === 'incubating') {
+    if (activeFilter === 'live') {
       return e.status === 'incubating' && !expired
     } else {
-      // Hatched tab shows: naturally hatched OR expired eggs
+      // Completed tab shows: naturally hatched OR expired eggs
       return e.status === 'hatched' || (e.status === 'incubating' && expired)
     }
   })
@@ -133,31 +148,32 @@ export default function Incubator() {
     >
       <Header
         title="Incubator"
-        subtitle={`${filteredEggs.length} ${activeFilter}`}
+        subtitle={`${filteredEggs.length} ${activeFilter === 'live' ? 'active' : 'completed'}`}
       />
 
       {/* Filter Tabs */}
       <div className="px-4 py-3 flex gap-2">
         <button
-          onClick={() => setActiveFilter('incubating')}
-          className={`flex-1 py-2.5 rounded-xl text-sm font-medium transition-all ${
-            activeFilter === 'incubating'
+          onClick={() => setActiveFilter('live')}
+          className={`flex-1 py-2.5 rounded-xl text-sm font-medium transition-all flex items-center justify-center gap-2 ${
+            activeFilter === 'live'
               ? 'bg-accent-cyan/20 text-accent-cyan border border-accent-cyan/30'
               : 'bg-quant-surface text-gray-400 border border-transparent'
           }`}
         >
-          Incubating
+          <Radio size={16} />
+          Live
         </button>
         <button
-          onClick={() => setActiveFilter('hatched')}
+          onClick={() => setActiveFilter('completed')}
           className={`flex-1 py-2.5 rounded-xl text-sm font-medium transition-all flex items-center justify-center gap-2 ${
-            activeFilter === 'hatched'
+            activeFilter === 'completed'
               ? 'bg-accent-cyan/20 text-accent-cyan border border-accent-cyan/30'
               : 'bg-quant-surface text-gray-400 border border-transparent'
           }`}
         >
           <Archive size={16} />
-          Hatched
+          Completed
         </button>
         {/* Console Toggle */}
         <button
@@ -196,11 +212,11 @@ export default function Incubator() {
               className="text-center py-16"
             >
               <div className="w-20 h-20 mx-auto mb-4 rounded-full bg-quant-surface flex items-center justify-center">
-                <EggIcon size={48} status={activeFilter === 'incubating' ? 'incubating' : 'hatched'} />
+                <EggIcon size={48} status={activeFilter === 'live' ? 'incubating' : 'hatched'} />
               </div>
-              <p className="text-gray-400 mb-1">No {activeFilter} eggs</p>
+              <p className="text-gray-400 mb-1">No {activeFilter === 'live' ? 'live' : 'completed'} eggs</p>
               <p className="text-sm text-gray-500">
-                {activeFilter === 'incubating' ? 'Create a prompt to start' : 'Completed eggs appear here'}
+                {activeFilter === 'live' ? 'Create a prompt to start incubating' : 'Completed eggs appear here'}
               </p>
             </motion.div>
           ) : (
@@ -332,7 +348,7 @@ export default function Incubator() {
                     )}
                   </div>
 
-                  {/* Expanded Trades */}
+                  {/* Expanded Details */}
                   <AnimatePresence>
                     {isExpanded && (
                       <motion.div
@@ -341,7 +357,52 @@ export default function Incubator() {
                         exit={{ height: 0, opacity: 0 }}
                         className="border-t border-quant-border overflow-hidden"
                       >
-                        <div className="p-3 space-y-2 bg-quant-surface/20">
+                        <div className="p-3 space-y-4 bg-quant-surface/20">
+                          {/* Configuration Section */}
+                          {egg.config && (
+                            <div className="bg-quant-card rounded-xl p-3 border border-quant-border">
+                              <span className="text-[10px] text-gray-500 uppercase tracking-wider block mb-2">Configuration</span>
+                              <div className="grid grid-cols-3 gap-2">
+                                <div className="flex items-center gap-1.5">
+                                  <DollarSign size={12} className="text-accent-cyan" />
+                                  <span className="text-xs text-gray-400">Capital</span>
+                                  <span className="text-xs font-mono text-white ml-auto">${egg.config.capital}</span>
+                                </div>
+                                <div className="flex items-center gap-1.5">
+                                  <Zap size={12} className="text-accent-yellow" />
+                                  <span className="text-xs text-gray-400">Leverage</span>
+                                  <span className="text-xs font-mono text-white ml-auto">{egg.config.leverage}x</span>
+                                </div>
+                                <div className="flex items-center gap-1.5">
+                                  <Clock size={12} className="text-accent-purple" />
+                                  <span className="text-xs text-gray-400">Time</span>
+                                  <span className="text-xs text-white ml-auto">{EXECUTION_LABELS[egg.config.executionTime] || egg.config.executionTime}</span>
+                                </div>
+                                <div className="flex items-center gap-1.5">
+                                  <Cpu size={12} className="text-accent-green" />
+                                  <span className="text-xs text-gray-400">AI</span>
+                                  <span className="text-xs text-white ml-auto">
+                                    {AI_MODEL_LABELS[egg.config.aiModel]?.icon} {AI_MODEL_LABELS[egg.config.aiModel]?.name || egg.config.aiModel}
+                                  </span>
+                                </div>
+                                <div className="flex items-center gap-1.5">
+                                  <Target size={12} className="text-accent-orange" />
+                                  <span className="text-xs text-gray-400">Min IPE</span>
+                                  <span className="text-xs font-mono text-white ml-auto">{egg.config.minIpe}%</span>
+                                </div>
+                                <div className="flex items-center gap-1.5">
+                                  <Hash size={12} className="text-gray-400" />
+                                  <span className="text-xs text-gray-400">Results</span>
+                                  <span className="text-xs font-mono text-white ml-auto">{egg.config.numResults}</span>
+                                </div>
+                              </div>
+                            </div>
+                          )}
+
+                          {/* Trades Section */}
+                          <div>
+                            <span className="text-[10px] text-gray-500 uppercase tracking-wider block mb-2">Trades ({eggSignals.length})</span>
+                            <div className="space-y-2">
                           {eggSignals.map((signal) => {
                             const isLong = signal.strategy === 'LONG'
                             const isClosed = signal.status === 'closed'
@@ -447,6 +508,8 @@ export default function Incubator() {
                               </div>
                             )
                           })}
+                            </div>
+                          </div>
                         </div>
                       </motion.div>
                     )}

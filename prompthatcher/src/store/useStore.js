@@ -277,14 +277,25 @@ const useStore = create(
           selected: undefined // Remove selection flag
         }))
 
-        // Create the egg
+        // Create the egg with all prompt configuration
         const egg = {
           id: `egg-${Date.now()}`,
           promptId: prompt.id,
           promptName: prompt.name,
+          promptContent: prompt.content || '',
           status: 'incubating',
           trades: newSignals.map(s => s.id),
           totalCapital: selectedTrades.reduce((sum, t) => sum + (t.capital || 0), 0),
+          // Store all prompt configuration
+          config: {
+            capital: prompt.capital || 1000,
+            leverage: prompt.leverage || 5,
+            executionTime: prompt.executionTime || 'target',
+            aiModel: prompt.aiModel || 'gemini',
+            minIpe: prompt.minIpe || 80,
+            numResults: prompt.numResults || 3,
+            mode: prompt.mode || 'auto'
+          },
           executionTime: prompt.executionTime,
           expiresAt: EXECUTION_LIMITS[prompt.executionTime]
             ? new Date(Date.now() + EXECUTION_LIMITS[prompt.executionTime]).toISOString()
