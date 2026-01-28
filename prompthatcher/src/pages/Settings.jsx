@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Cpu, FileText, Database, ChevronRight, Eye, EyeOff, Check, X, AlertCircle, Edit3, Plus, Crown, ChevronDown, ChevronUp, Cloud, RefreshCw, Download, Upload, Activity, TrendingUp } from 'lucide-react'
+import { Cpu, FileText, Database, ChevronRight, Eye, EyeOff, Check, X, AlertCircle, Edit3, Plus, Crown, ChevronDown, ChevronUp, Cloud, RefreshCw, Download, Upload, Activity, TrendingUp, Trash2 } from 'lucide-react'
 import useStore from '../store/useStore'
 import Header from '../components/Header'
 
@@ -63,7 +63,8 @@ export default function Settings() {
     loadFromCloud,
     syncStatus,
     priceStatus,
-    refreshPrices
+    refreshPrices,
+    resetAllData
   } = useStore()
 
   const [activeTab, setActiveTab] = useState(0)
@@ -75,6 +76,7 @@ export default function Settings() {
   const [editingSystemPrompt, setEditingSystemPrompt] = useState(false)
   const [systemPromptContent, setSystemPromptContent] = useState(settings.systemPrompt || '')
   const [systemPromptExpanded, setSystemPromptExpanded] = useState(false)
+  const [showResetConfirm, setShowResetConfirm] = useState(false)
 
   const handleSaveSystemPrompt = () => {
     updateSystemPrompt(systemPromptContent)
@@ -693,6 +695,72 @@ export default function Settings() {
                   </div>
                 </div>
               </div>
+
+              {/* Danger Zone */}
+              <div className="bg-quant-card border border-accent-red/30 rounded-xl p-4">
+                <h3 className="font-semibold text-accent-red mb-3 flex items-center gap-2">
+                  <AlertCircle size={16} />
+                  Danger Zone
+                </h3>
+                <p className="text-sm text-gray-400 mb-4">
+                  Reset all local data and start fresh. This will clear all prompts, eggs, and signals.
+                </p>
+                <button
+                  onClick={() => setShowResetConfirm(true)}
+                  className="w-full py-3 rounded-xl font-medium bg-accent-red/20 text-accent-red hover:bg-accent-red/30 transition-all flex items-center justify-center gap-2"
+                >
+                  <Trash2 size={16} />
+                  Reset All Data
+                </button>
+              </div>
+
+              {/* Reset Confirmation Modal */}
+              <AnimatePresence>
+                {showResetConfirm && (
+                  <motion.div
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    exit={{ opacity: 0 }}
+                    className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4"
+                    onClick={() => setShowResetConfirm(false)}
+                  >
+                    <motion.div
+                      initial={{ scale: 0.9, opacity: 0 }}
+                      animate={{ scale: 1, opacity: 1 }}
+                      exit={{ scale: 0.9, opacity: 0 }}
+                      onClick={(e) => e.stopPropagation()}
+                      className="bg-quant-card border border-accent-red/30 rounded-2xl p-6 max-w-sm w-full"
+                    >
+                      <div className="text-center mb-6">
+                        <div className="w-16 h-16 rounded-full bg-accent-red/20 flex items-center justify-center mx-auto mb-4">
+                          <Trash2 size={32} className="text-accent-red" />
+                        </div>
+                        <h3 className="text-xl font-bold text-white mb-2">Reset All Data?</h3>
+                        <p className="text-sm text-gray-400">
+                          This will permanently delete all your prompts, eggs, signals, and settings. This action cannot be undone.
+                        </p>
+                      </div>
+                      <div className="flex gap-3">
+                        <button
+                          onClick={() => setShowResetConfirm(false)}
+                          className="flex-1 py-3 rounded-xl bg-quant-surface text-gray-400 hover:text-white transition-colors"
+                        >
+                          Cancel
+                        </button>
+                        <button
+                          onClick={() => {
+                            setShowResetConfirm(false)
+                            resetAllData()
+                          }}
+                          className="flex-1 py-3 rounded-xl bg-accent-red text-white font-medium hover:bg-accent-red/80 transition-colors"
+                        >
+                          Reset Everything
+                        </button>
+                      </div>
+                    </motion.div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
             </motion.div>
           )}
         </AnimatePresence>

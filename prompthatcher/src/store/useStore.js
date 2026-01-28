@@ -417,6 +417,40 @@ const useStore = create(
       onboardingCompleted: false,
       completeOnboarding: () => set({ onboardingCompleted: true }),
       resetOnboarding: () => set({ onboardingCompleted: false }),
+
+      // Reset all data (for fresh start)
+      resetAllData: () => {
+        // Clear localStorage
+        localStorage.removeItem('prompthatcher-storage')
+
+        // Reset all state to initial values
+        set({
+          prompts: [],
+          signals: [],
+          eggs: [],
+          pendingTrades: [],
+          activityLogs: [],
+          onboardingCompleted: false,
+          prices: {},
+          priceStatus: {
+            isFetching: false,
+            lastUpdated: null,
+            error: null,
+            source: null,
+            fallbackUsed: false
+          },
+          syncStatus: {
+            syncing: false,
+            lastSynced: null,
+            error: null,
+            loading: false
+          },
+          isCloudInitialized: false
+        })
+
+        // Force page reload for clean state
+        window.location.reload()
+      },
       isConfigured: () => {
         const state = get()
         const hasAiKey = Object.values(state.settings.apiKeys).some(key => key && key.length > 0)
