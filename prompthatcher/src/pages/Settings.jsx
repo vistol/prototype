@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Cpu, FileText, Database, ChevronRight, Eye, EyeOff, Check, X, AlertCircle, Edit3, Plus, Crown, ChevronDown, ChevronUp, Cloud, RefreshCw, Download, Upload, Activity, TrendingUp, Trash2, Link, Unlink, Info, Egg, BarChart3, ScrollText } from 'lucide-react'
+import { Cpu, FileText, Database, ChevronRight, Eye, EyeOff, Check, X, AlertCircle, Edit3, Plus, Crown, ChevronDown, ChevronUp, Cloud, RefreshCw, Download, Upload, Activity, TrendingUp, Trash2, Link, Unlink, Info, Egg, BarChart3, ScrollText, Zap } from 'lucide-react'
 import useStore from '../store/useStore'
 import Header from '../components/Header'
 import PromptEditorModal from '../components/PromptEditorModal'
@@ -85,6 +85,77 @@ export default function Settings() {
   const [systemPromptContent, setSystemPromptContent] = useState(settings.systemPrompt || '')
   const [systemPromptExpanded, setSystemPromptExpanded] = useState(false)
   const [showResetConfirm, setShowResetConfirm] = useState(false)
+
+  // API Key testing state
+  const [testingApi, setTestingApi] = useState({})
+  const [apiTestResult, setApiTestResult] = useState({})
+  const [apiKeySaved, setApiKeySaved] = useState({})
+
+  // Test API connection
+  const testApiConnection = async (providerId, apiKey) => {
+    if (!apiKey || apiKey.length < 10) {
+      setApiTestResult({ ...apiTestResult, [providerId]: { success: false, error: 'API key too short' } })
+      return
+    }
+
+    setTestingApi({ ...testingApi, [providerId]: true })
+    setApiTestResult({ ...apiTestResult, [providerId]: null })
+
+    try {
+      let testUrl, testBody, headers = { 'Content-Type': 'application/json' }
+
+      if (providerId === 'google') {
+        testUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`
+        testBody = JSON.stringify({
+          contents: [{ parts: [{ text: 'Say "OK" if you can read this.' }] }],
+          generationConfig: { maxOutputTokens: 10 }
+        })
+      } else if (providerId === 'openai') {
+        testUrl = 'https://api.openai.com/v1/chat/completions'
+        headers['Authorization'] = `Bearer ${apiKey}`
+        testBody = JSON.stringify({
+          model: 'gpt-3.5-turbo',
+          messages: [{ role: 'user', content: 'Say OK' }],
+          max_tokens: 5
+        })
+      } else if (providerId === 'xai') {
+        testUrl = 'https://api.x.ai/v1/chat/completions'
+        headers['Authorization'] = `Bearer ${apiKey}`
+        testBody = JSON.stringify({
+          model: 'grok-beta',
+          messages: [{ role: 'user', content: 'Say OK' }],
+          max_tokens: 5
+        })
+      }
+
+      const response = await fetch(testUrl, { method: 'POST', headers, body: testBody })
+
+      if (response.ok) {
+        setApiTestResult({ ...apiTestResult, [providerId]: { success: true } })
+        setApiKeySaved({ ...apiKeySaved, [providerId]: true })
+      } else {
+        const error = await response.json()
+        setApiTestResult({
+          ...apiTestResult,
+          [providerId]: { success: false, error: error.error?.message || `Error ${response.status}` }
+        })
+      }
+    } catch (error) {
+      setApiTestResult({
+        ...apiTestResult,
+        [providerId]: { success: false, error: error.message }
+      })
+    }
+
+    setTestingApi({ ...testingApi, [providerId]: false })
+  }
+
+  // Handle API key change
+  const handleApiKeyChange = (providerId, value) => {
+    updateApiKey(providerId, value)
+    setApiKeySaved({ ...apiKeySaved, [providerId]: false })
+    setApiTestResult({ ...apiTestResult, [providerId]: null })
+  }
 
   // Selective delete state
   const [deleteOptions, setDeleteOptions] = useState({
@@ -254,11 +325,23 @@ export default function Settings() {
                   >
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-3">
-                        <span className="text-2xl">{provider.icon}</span>
+                        <div className="relative">
+                          <span className="text-2xl">{provider.icon}</span>
+                          {settings.apiKeys[provider.id] && (
+                            <span className={`absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full border-2 border-quant-card ${
+                              apiTestResult[provider.id]?.success ? 'bg-accent-green' : 'bg-accent-yellow'
+                            }`} />
+                          )}
+                        </div>
                         <div>
                           <span className="font-semibold text-white block">{provider.name}</span>
                           <span className="text-xs text-gray-500">
-                            {provider.models.length} models available
+                            {settings.apiKeys[provider.id]
+                              ? apiTestResult[provider.id]?.success
+                                ? '✓ Connected'
+                                : 'Key saved - test to verify'
+                              : 'No API key'
+                            }
                           </span>
                         </div>
                       </div>
@@ -289,9 +372,15 @@ export default function Settings() {
                           <input
                             type={showApiKey[provider.id] ? 'text' : 'password'}
                             value={settings.apiKeys[provider.id] || ''}
-                            onChange={(e) => updateApiKey(provider.id, e.target.value)}
+                            onChange={(e) => handleApiKeyChange(provider.id, e.target.value)}
                             placeholder="Enter your API key"
-                            className="w-full bg-quant-surface border border-quant-border rounded-lg px-4 py-2.5 pr-10 text-white text-sm font-mono"
+                            className={`w-full bg-quant-surface border rounded-lg px-4 py-2.5 pr-10 text-white text-sm font-mono ${
+                              apiTestResult[provider.id]?.success
+                                ? 'border-accent-green'
+                                : apiTestResult[provider.id]?.error
+                                  ? 'border-accent-red'
+                                  : 'border-quant-border'
+                            }`}
                           />
                           <button
                             onClick={(e) => {
@@ -303,6 +392,54 @@ export default function Settings() {
                             {showApiKey[provider.id] ? <EyeOff size={16} /> : <Eye size={16} />}
                           </button>
                         </div>
+
+                        {/* Test Connection Button */}
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            testApiConnection(provider.id, settings.apiKeys[provider.id])
+                          }}
+                          disabled={!settings.apiKeys[provider.id] || testingApi[provider.id]}
+                          className={`w-full mt-3 py-2.5 rounded-lg font-medium text-sm flex items-center justify-center gap-2 transition-all ${
+                            testingApi[provider.id]
+                              ? 'bg-quant-surface text-gray-400'
+                              : apiTestResult[provider.id]?.success
+                                ? 'bg-accent-green/20 text-accent-green'
+                                : 'bg-accent-cyan/20 text-accent-cyan hover:bg-accent-cyan/30'
+                          }`}
+                        >
+                          {testingApi[provider.id] ? (
+                            <>
+                              <RefreshCw size={14} className="animate-spin" />
+                              Testing...
+                            </>
+                          ) : apiTestResult[provider.id]?.success ? (
+                            <>
+                              <Check size={14} />
+                              Connected & Saved!
+                            </>
+                          ) : (
+                            <>
+                              <Zap size={14} />
+                              Test Connection
+                            </>
+                          )}
+                        </button>
+
+                        {/* Test Result Message */}
+                        {apiTestResult[provider.id]?.error && (
+                          <div className="mt-2 p-2 rounded-lg bg-accent-red/10 border border-accent-red/30 text-accent-red text-xs flex items-start gap-2">
+                            <AlertCircle size={14} className="shrink-0 mt-0.5" />
+                            <span>{apiTestResult[provider.id].error}</span>
+                          </div>
+                        )}
+
+                        {apiTestResult[provider.id]?.success && (
+                          <div className="mt-2 p-2 rounded-lg bg-accent-green/10 border border-accent-green/30 text-accent-green text-xs flex items-center gap-2">
+                            <Check size={14} />
+                            <span>API key verified and saved successfully!</span>
+                          </div>
+                        )}
 
                         {/* Model Selection */}
                         <label className="text-xs text-gray-400 block mt-4 mb-2">Model</label>

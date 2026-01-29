@@ -1,6 +1,6 @@
 import { useState, useMemo } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { X, Sparkles, PenTool, Clock, DollarSign, TrendingUp, Cpu, Target, Hash, Crown, ArrowRight, BookOpen, AlertTriangle, Zap } from 'lucide-react'
+import { X, Sparkles, PenTool, Clock, DollarSign, TrendingUp, Cpu, Target, Hash, Crown, ArrowRight, BookOpen, AlertTriangle, Zap, AlertCircle, Check } from 'lucide-react'
 import useStore from '../store/useStore'
 import TradeSelectionModal from './TradeSelectionModal'
 
@@ -11,10 +11,11 @@ const executionTimes = [
   { id: 'swing', label: 'Swing', desc: '2-7d' },
 ]
 
-const aiModels = [
-  { id: 'gemini', label: 'Gemini', icon: '🔮' },
+// AI Providers config - must match settings
+const AI_PROVIDERS = [
+  { id: 'google', label: 'Gemini', icon: '🔮' },
   { id: 'openai', label: 'GPT-4', icon: '🤖' },
-  { id: 'grok', label: 'Grok', icon: '⚡' },
+  { id: 'xai', label: 'Grok', icon: '⚡' },
 ]
 
 // Target profit presets
@@ -70,17 +71,35 @@ const calculateEstimate = (targetPct, leverage) => {
 }
 
 export default function NewPromptModal() {
-  const { setNewPromptModalOpen, addPrompt, generateTrades, prompts } = useStore()
+  const { setNewPromptModalOpen, addPrompt, generateTrades, prompts, settings } = useStore()
   const [mode, setMode] = useState('auto') // 'auto', 'library', 'manual'
   const [name, setName] = useState('')
   const [content, setContent] = useState('')
   const [executionTime, setExecutionTime] = useState('target')
   const [capital, setCapital] = useState(1000)
   const [leverage, setLeverage] = useState(5)
-  const [aiModel, setAiModel] = useState('gemini')
   const [minIpe, setMinIpe] = useState(80)
   const [numResults, setNumResults] = useState(3)
   const [targetPct, setTargetPct] = useState(10) // Target profit percentage
+
+  // Get configured AI providers (those with API keys)
+  const configuredProviders = useMemo(() => {
+    return AI_PROVIDERS.filter(provider => {
+      const apiKey = settings?.apiKeys?.[provider.id]
+      return apiKey && apiKey.length > 0
+    })
+  }, [settings?.apiKeys])
+
+  // Default to first configured provider, or 'google' if none
+  const [aiProvider, setAiProvider] = useState(() => {
+    // First check if current settings provider has a key
+    if (settings?.apiKeys?.[settings?.aiProvider]) {
+      return settings.aiProvider
+    }
+    // Otherwise use first configured provider
+    const firstConfigured = AI_PROVIDERS.find(p => settings?.apiKeys?.[p.id])
+    return firstConfigured?.id || 'google'
+  })
 
   // Selected prompt from library
   const [selectedPromptId, setSelectedPromptId] = useState(null)
@@ -91,6 +110,9 @@ export default function NewPromptModal() {
 
   // Get active prompts for library
   const savedPrompts = prompts.filter(p => p.status === 'active')
+
+  // Check if any provider is configured
+  const hasConfiguredProvider = configuredProviders.length > 0
 
   // Calculate estimate when in target mode
   const estimate = useMemo(() => {
@@ -106,12 +128,17 @@ export default function NewPromptModal() {
     setExecutionTime(prompt.executionTime || 'target')
     setCapital(prompt.capital || 1000)
     setLeverage(prompt.leverage || 5)
-    setAiModel(prompt.aiModel || 'gemini')
+    // Map old aiModel values to new provider IDs
+    const providerMap = { 'gemini': 'google', 'openai': 'openai', 'grok': 'xai' }
+    const mappedProvider = providerMap[prompt.aiModel] || prompt.aiModel || 'google'
+    setAiProvider(mappedProvider)
     setMinIpe(prompt.minIpe || 80)
     setNumResults(prompt.numResults || 3)
   }
 
   const handleSubmit = async () => {
+    if (!hasConfiguredProvider) return
+
     let promptToUse = null
 
     if (mode === 'library') {
@@ -123,7 +150,7 @@ export default function NewPromptModal() {
         executionTime,
         capital,
         leverage,
-        aiModel,
+        aiModel: aiProvider, // Use provider ID
         minIpe,
         numResults,
         targetPct: executionTime === 'target' ? targetPct : null
@@ -143,7 +170,7 @@ export default function NewPromptModal() {
         executionTime,
         capital,
         leverage,
-        aiModel,
+        aiModel: aiProvider, // Use provider ID
         minIpe,
         numResults,
         targetPct: executionTime === 'target' ? targetPct : null,
@@ -170,6 +197,7 @@ export default function NewPromptModal() {
   }
 
   const canSubmit = () => {
+    if (!hasConfiguredProvider) return false
     if (mode === 'library') return selectedPromptId !== null
     return name.trim().length > 0
   }
@@ -441,28 +469,53 @@ export default function NewPromptModal() {
                 </div>
               </div>
 
+              {/* AI Provider Warning if none configured */}
+              {!hasConfiguredProvider && (
+                <div className="p-3 bg-accent-red/10 border border-accent-red/30 rounded-xl">
+                  <div className="flex items-start gap-2">
+                    <AlertCircle size={16} className="text-accent-red shrink-0 mt-0.5" />
+                    <div>
+                      <p className="text-sm font-medium text-accent-red">No AI Provider Configured</p>
+                      <p className="text-xs text-gray-400 mt-1">
+                        Go to Settings → AI Provider to add your API key
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              )}
+
               {/* AI Model & Results - Compact row */}
               <div className="grid grid-cols-2 gap-3">
-                {/* AI Model dropdown-style */}
+                {/* AI Provider selection */}
                 <div>
                   <label className="text-[10px] text-gray-500 uppercase tracking-wider mb-1 flex items-center gap-1">
-                    <Cpu size={10} /> AI Model
+                    <Cpu size={10} /> AI Provider
                   </label>
                   <div className="flex gap-1">
-                    {aiModels.map((model) => (
-                      <button
-                        key={model.id}
-                        onClick={() => setAiModel(model.id)}
-                        className={`flex-1 py-2 rounded-lg border text-center transition-all ${
-                          aiModel === model.id
-                            ? 'border-accent-cyan bg-accent-cyan/10'
-                            : 'border-quant-border bg-quant-surface'
-                        }`}
-                        title={model.label}
-                      >
-                        <span className="text-sm">{model.icon}</span>
-                      </button>
-                    ))}
+                    {AI_PROVIDERS.map((provider) => {
+                      const isConfigured = settings?.apiKeys?.[provider.id]?.length > 0
+                      const isSelected = aiProvider === provider.id
+                      return (
+                        <button
+                          key={provider.id}
+                          onClick={() => isConfigured && setAiProvider(provider.id)}
+                          disabled={!isConfigured}
+                          className={`flex-1 py-2 rounded-lg border text-center transition-all relative ${
+                            isSelected && isConfigured
+                              ? 'border-accent-cyan bg-accent-cyan/10'
+                              : isConfigured
+                                ? 'border-quant-border bg-quant-surface hover:border-gray-600'
+                                : 'border-quant-border bg-quant-surface opacity-40 cursor-not-allowed'
+                          }`}
+                          title={isConfigured ? provider.label : `${provider.label} - No API key`}
+                        >
+                          <span className="text-sm">{provider.icon}</span>
+                          {isConfigured && (
+                            <span className="absolute -top-1 -right-1 w-2 h-2 rounded-full bg-accent-green" />
+                          )}
+                        </button>
+                      )
+                    })}
                   </div>
                 </div>
 
