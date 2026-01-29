@@ -114,9 +114,11 @@ export default function Settings() {
       let testUrl, testBody, headers = { 'Content-Type': 'application/json' }
 
       if (providerId === 'anthropic') {
+        // Note: Anthropic API may have CORS restrictions for browser calls
         testUrl = 'https://api.anthropic.com/v1/messages'
         headers['x-api-key'] = apiKey
         headers['anthropic-version'] = '2023-06-01'
+        headers['anthropic-dangerous-direct-browser-access'] = 'true'
         testBody = JSON.stringify({
           model: 'claude-3-haiku-20240307',
           max_tokens: 10,
