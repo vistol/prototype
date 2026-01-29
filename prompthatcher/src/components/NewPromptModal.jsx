@@ -161,10 +161,22 @@ export default function NewPromptModal() {
     setExecutionTime(prompt.executionTime || 'target')
     setCapital(prompt.capital || 1000)
     setLeverage(prompt.leverage || 5)
+
     // Map old aiModel values to new provider IDs
     const providerMap = { 'gemini': 'google', 'openai': 'openai', 'grok': 'xai' }
     const mappedProvider = providerMap[prompt.aiModel] || prompt.aiModel || 'google'
-    setAiProvider(mappedProvider)
+
+    // Check if the mapped provider has an API key configured
+    // If not, use the first configured provider instead
+    const hasKeyForMapped = settings?.apiKeys?.[mappedProvider]?.length > 0
+    if (hasKeyForMapped) {
+      setAiProvider(mappedProvider)
+    } else {
+      // Find first provider with a configured API key
+      const firstConfigured = AI_PROVIDERS.find(p => settings?.apiKeys?.[p.id]?.length > 0)
+      setAiProvider(firstConfigured?.id || mappedProvider)
+    }
+
     setMinIpe(prompt.minIpe || 80)
     setNumResults(prompt.numResults || 3)
     setTargetPct(prompt.targetPct || 10)
