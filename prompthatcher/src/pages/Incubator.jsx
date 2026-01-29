@@ -197,17 +197,25 @@ export default function Incubator() {
 
   // Get egg status info
   const getEggStatus = (egg) => {
-    const eggSignals = signals.filter(s => egg.trades.includes(s.id))
-    const closedCount = eggSignals.filter(s => s.status === 'closed').length
-    const isExpired = egg.expiresAt && new Date(egg.expiresAt) <= new Date()
-    const activeCount = isExpired ? 0 : (eggSignals.length - closedCount)
+    try {
+      if (!egg?.trades || !Array.isArray(egg.trades)) {
+        return { total: 0, closed: 0, active: 0, isExpired: false, progress: 0 }
+      }
+      const eggSignals = signals.filter(s => egg.trades.includes(s.id))
+      const closedCount = eggSignals.filter(s => s.status === 'closed').length
+      const isExpired = egg.expiresAt && new Date(egg.expiresAt) <= new Date()
+      const activeCount = isExpired ? 0 : (eggSignals.length - closedCount)
 
-    return {
-      total: eggSignals.length,
-      closed: closedCount,
-      active: activeCount,
-      isExpired,
-      progress: eggSignals.length > 0 ? (closedCount / eggSignals.length) * 100 : 0
+      return {
+        total: eggSignals.length,
+        closed: closedCount,
+        active: activeCount,
+        isExpired,
+        progress: eggSignals.length > 0 ? (closedCount / eggSignals.length) * 100 : 0
+      }
+    } catch (error) {
+      console.error('Error in getEggStatus:', error)
+      return { total: 0, closed: 0, active: 0, isExpired: false, progress: 0 }
     }
   }
 
@@ -278,50 +286,61 @@ export default function Incubator() {
 
   // Calculate results for an egg (handles both closed and expired trades)
   const calculateEggResults = (egg) => {
-    const eggSignals = signals.filter(s => egg.trades.includes(s.id))
-    const closedSignals = eggSignals.filter(s => s.status === 'closed')
-    const activeSignals = eggSignals.filter(s => s.status === 'active')
+    try {
+      if (!egg?.trades || !Array.isArray(egg.trades)) {
+        return {
+          totalTrades: 0, closedTrades: 0, expiredTrades: 0,
+          wins: 0, losses: 0, winRate: 0, totalPnl: 0, profitFactor: 0
+        }
+      }
 
-    // For expired eggs, treat active trades as "expired" with their unrealized PnL
-    const expired = isEggExpired(egg)
+      const eggSignals = signals.filter(s => egg.trades.includes(s.id))
+      const closedSignals = eggSignals.filter(s => s.status === 'closed')
+      const activeSignals = eggSignals.filter(s => s.status === 'active')
 
-    // All signals to consider for PnL calculation
-    const signalsForPnl = expired ? eggSignals : closedSignals
+      // For expired eggs, treat active trades as "expired" with their unrealized PnL
+      const expired = isEggExpired(egg)
 
-    if (signalsForPnl.length === 0) {
+      // All signals to consider for PnL calculation
+      const signalsForPnl = expired ? eggSignals : closedSignals
+
+      if (signalsForPnl.length === 0) {
+        return {
+          totalTrades: eggSignals.length,
+          closedTrades: closedSignals.length,
+          expiredTrades: expired ? activeSignals.length : 0,
+          wins: 0, losses: 0, winRate: 0, totalPnl: 0, profitFactor: 0
+        }
+      }
+
+      // Calculate PnL for all relevant signals
+      const pnlValues = signalsForPnl.map(s => getSignalPnl(s) || 0)
+      const avgPnl = pnlValues.length > 0 ? pnlValues.reduce((sum, p) => sum + p, 0) / pnlValues.length : 0
+
+      // Count wins/losses based on PnL
+      const wins = pnlValues.filter(p => p > 0).length
+      const losses = pnlValues.filter(p => p < 0).length
+
+      // Profit factor
+      const grossProfit = pnlValues.filter(p => p > 0).reduce((sum, p) => sum + p, 0)
+      const grossLoss = Math.abs(pnlValues.filter(p => p < 0).reduce((sum, p) => sum + p, 0))
+
       return {
         totalTrades: eggSignals.length,
         closedTrades: closedSignals.length,
         expiredTrades: expired ? activeSignals.length : 0,
-        wins: 0,
-        losses: 0,
-        winRate: 0,
-        totalPnl: 0,
-        profitFactor: 0
+        wins,
+        losses,
+        winRate: signalsForPnl.length > 0 ? Math.round((wins / signalsForPnl.length) * 100) : 0,
+        totalPnl: avgPnl,
+        profitFactor: grossLoss > 0 ? grossProfit / grossLoss : (grossProfit > 0 ? Infinity : 0)
       }
-    }
-
-    // Calculate PnL for all relevant signals
-    const pnlValues = signalsForPnl.map(s => getSignalPnl(s))
-    const avgPnl = pnlValues.reduce((sum, p) => sum + p, 0) / pnlValues.length
-
-    // Count wins/losses based on PnL
-    const wins = pnlValues.filter(p => p > 0).length
-    const losses = pnlValues.filter(p => p < 0).length
-
-    // Profit factor
-    const grossProfit = pnlValues.filter(p => p > 0).reduce((sum, p) => sum + p, 0)
-    const grossLoss = Math.abs(pnlValues.filter(p => p < 0).reduce((sum, p) => sum + p, 0))
-
-    return {
-      totalTrades: eggSignals.length,
-      closedTrades: closedSignals.length,
-      expiredTrades: expired ? activeSignals.length : 0,
-      wins,
-      losses,
-      winRate: signalsForPnl.length > 0 ? Math.round((wins / signalsForPnl.length) * 100) : 0,
-      totalPnl: avgPnl, // Average PnL percentage
-      profitFactor: grossLoss > 0 ? grossProfit / grossLoss : (grossProfit > 0 ? Infinity : 0)
+    } catch (error) {
+      console.error('Error in calculateEggResults:', error)
+      return {
+        totalTrades: 0, closedTrades: 0, expiredTrades: 0,
+        wins: 0, losses: 0, winRate: 0, totalPnl: 0, profitFactor: 0
+      }
     }
   }
 
