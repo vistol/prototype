@@ -311,40 +311,43 @@ export default function Incubator() {
         subtitle={`${filteredEggs.length} ${activeFilter === 'live' ? 'active' : 'completed'}`}
       />
 
-      {/* Filter Tabs */}
-      <div className="px-4 py-3 flex gap-2">
-        <button
-          onClick={() => setActiveFilter('live')}
-          className={`flex-1 py-2.5 rounded-xl text-sm font-medium transition-all flex items-center justify-center gap-1.5 ${
-            activeFilter === 'live'
-              ? 'bg-accent-cyan/20 text-accent-cyan border border-accent-cyan/30'
-              : 'bg-quant-surface text-gray-400 border border-transparent'
-          }`}
-        >
-          <Radio size={14} />
-          <span>Live</span>
-        </button>
-        <button
-          onClick={() => setActiveFilter('completed')}
-          className={`flex-1 py-2.5 rounded-xl text-sm font-medium transition-all flex items-center justify-center gap-1.5 ${
-            activeFilter === 'completed'
-              ? 'bg-accent-green/20 text-accent-green border border-accent-green/30'
-              : 'bg-quant-surface text-gray-400 border border-transparent'
-          }`}
-        >
-          <Archive size={14} />
-          <span>Historial</span>
-        </button>
-        {/* Console Toggle */}
+      {/* Filter Tabs - Full Width */}
+      <div className="px-4 py-3">
+        <div className="flex gap-2 w-full">
+          <button
+            onClick={() => setActiveFilter('live')}
+            className={`flex-1 py-3 rounded-xl text-sm font-semibold transition-all flex items-center justify-center gap-2 ${
+              activeFilter === 'live'
+                ? 'bg-accent-cyan text-quant-bg'
+                : 'bg-quant-surface text-gray-400 border border-quant-border'
+            }`}
+          >
+            <Radio size={16} />
+            Live
+          </button>
+          <button
+            onClick={() => setActiveFilter('completed')}
+            className={`flex-1 py-3 rounded-xl text-sm font-semibold transition-all flex items-center justify-center gap-2 ${
+              activeFilter === 'completed'
+                ? 'bg-accent-green text-quant-bg'
+                : 'bg-quant-surface text-gray-400 border border-quant-border'
+            }`}
+          >
+            <Archive size={16} />
+            Historial
+          </button>
+        </div>
+        {/* Console Toggle - Below tabs */}
         <button
           onClick={() => setShowConsole(!showConsole)}
-          className={`p-2.5 rounded-xl transition-all ${
+          className={`w-full mt-2 py-2 rounded-lg text-xs font-medium transition-all flex items-center justify-center gap-1.5 ${
             showConsole
               ? 'bg-accent-purple/20 text-accent-purple border border-accent-purple/30'
-              : 'bg-quant-surface text-gray-400 border border-transparent'
+              : 'bg-quant-surface/50 text-gray-500 border border-transparent'
           }`}
         >
-          <Activity size={16} />
+          <Activity size={12} />
+          {showConsole ? 'Ocultar Consola' : 'Mostrar Consola'}
         </button>
       </div>
 
