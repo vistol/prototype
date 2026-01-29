@@ -1311,12 +1311,14 @@ If no truly new strategy can be generated, you must invent a new angle rather th
     }),
     {
       name: 'prompthatcher-storage',
-      // Only persist Supabase credentials locally - all data lives in the cloud
+      // Persist settings locally including API keys
       partialize: (state) => ({
         onboardingCompleted: state.onboardingCompleted,
         settings: {
           supabase: state.settings.supabase,
-          tradingPlatform: state.settings.tradingPlatform
+          tradingPlatform: state.settings.tradingPlatform,
+          apiKeys: state.settings.apiKeys,
+          aiProvider: state.settings.aiProvider
         }
       }),
       // Deep merge settings to preserve default values for non-persisted properties
@@ -1335,8 +1337,11 @@ If no truly new strategy can be generated, you must invent a new angle rather th
             ...currentState.settings.tradingPlatform,
             ...(persistedState?.settings?.tradingPlatform || {})
           },
-          // Keep default apiKeys from currentState (not persisted)
-          apiKeys: currentState.settings.apiKeys
+          // Restore persisted API keys, falling back to defaults if not set
+          apiKeys: {
+            ...currentState.settings.apiKeys,
+            ...(persistedState?.settings?.apiKeys || {})
+          }
         }
       })
     }
