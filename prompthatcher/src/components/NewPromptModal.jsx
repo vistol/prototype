@@ -13,6 +13,7 @@ const executionTimes = [
 
 // AI Providers config - must match settings
 const AI_PROVIDERS = [
+  { id: 'anthropic', label: 'Claude', icon: '🧠' },
   { id: 'google', label: 'Gemini', icon: '🔮' },
   { id: 'openai', label: 'GPT-4', icon: '🤖' },
   { id: 'xai', label: 'Grok', icon: '⚡' },

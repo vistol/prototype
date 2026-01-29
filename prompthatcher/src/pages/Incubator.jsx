@@ -16,8 +16,11 @@ const EXECUTION_LABELS = {
 
 // AI Model labels
 const AI_MODEL_LABELS = {
+  anthropic: { name: 'Claude', icon: '🧠' },
+  google: { name: 'Gemini', icon: '🔮' },
   gemini: { name: 'Gemini', icon: '🔮' },
   openai: { name: 'GPT-4', icon: '🤖' },
+  xai: { name: 'Grok', icon: '⚡' },
   grok: { name: 'Grok', icon: '⚡' }
 }
 

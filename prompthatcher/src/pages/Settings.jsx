@@ -26,6 +26,15 @@ const tradingPlatforms = [
 
 const aiProviders = [
   {
+    id: 'anthropic',
+    name: 'Anthropic',
+    models: ['claude-sonnet-4-20250514', 'claude-3-5-sonnet-20241022', 'claude-3-haiku-20240307'],
+    icon: '🧠',
+    color: 'from-orange-500 to-amber-500',
+    apiUrl: 'https://console.anthropic.com/settings/keys',
+    apiLabel: 'Get API key from Anthropic Console'
+  },
+  {
     id: 'google',
     name: 'Google',
     models: ['gemini-1.5-flash', 'gemini-1.5-pro', 'gemini-pro'],
@@ -104,7 +113,16 @@ export default function Settings() {
     try {
       let testUrl, testBody, headers = { 'Content-Type': 'application/json' }
 
-      if (providerId === 'google') {
+      if (providerId === 'anthropic') {
+        testUrl = 'https://api.anthropic.com/v1/messages'
+        headers['x-api-key'] = apiKey
+        headers['anthropic-version'] = '2023-06-01'
+        testBody = JSON.stringify({
+          model: 'claude-3-haiku-20240307',
+          max_tokens: 10,
+          messages: [{ role: 'user', content: 'Say OK' }]
+        })
+      } else if (providerId === 'google') {
         // Use v1 endpoint with gemini-1.5-flash
         testUrl = `https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent?key=${apiKey}`
         testBody = JSON.stringify({

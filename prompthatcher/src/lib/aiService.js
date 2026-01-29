@@ -328,6 +328,42 @@ const callGrokAPI = async (prompt, apiKey) => {
   return data.choices[0].message.content
 }
 
+// Call Anthropic Claude API
+const callClaudeAPI = async (prompt, apiKey, model = 'claude-sonnet-4-20250514') => {
+  const response = await fetch('https://api.anthropic.com/v1/messages', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'x-api-key': apiKey,
+      'anthropic-version': '2023-06-01'
+    },
+    body: JSON.stringify({
+      model: model,
+      max_tokens: 4096,
+      system: 'You are a quantitative trading analyst. Always respond with valid JSON only. No markdown, no explanations outside the JSON array.',
+      messages: [
+        {
+          role: 'user',
+          content: prompt
+        }
+      ]
+    })
+  })
+
+  if (!response.ok) {
+    const error = await response.json()
+    throw new Error(error.error?.message || `Claude API error: ${response.status}`)
+  }
+
+  const data = await response.json()
+
+  if (!data.content?.[0]?.text) {
+    throw new Error('No response from Claude')
+  }
+
+  return data.content[0].text
+}
+
 // Main function to generate trades from prompt using AI
 export const generateTradesFromPrompt = async (prompt, settings, numResults = 3) => {
   console.log('Generating trades with AI...')
@@ -375,6 +411,9 @@ export const generateTradesFromPrompt = async (prompt, settings, numResults = 3)
   let aiResponse
   try {
     switch (settings.aiProvider) {
+      case 'anthropic':
+        aiResponse = await callClaudeAPI(aiPrompt, apiKey, settings.aiModel || 'claude-sonnet-4-20250514')
+        break
       case 'google':
         aiResponse = await callGeminiAPI(aiPrompt, apiKey, settings.aiModel || 'gemini-1.5-flash')
         break

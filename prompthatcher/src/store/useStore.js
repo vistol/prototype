@@ -597,6 +597,7 @@ const useStore = create(
         aiProvider: 'google',
         aiModel: 'gemini-1.5-flash',
         apiKeys: {
+          anthropic: '',
           google: '',
           openai: '',
           xai: ''
