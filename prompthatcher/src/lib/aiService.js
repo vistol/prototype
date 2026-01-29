@@ -200,24 +200,23 @@ const parseAIResponse = (responseText, prices, config) => {
 // Map legacy model names to current valid model names
 const normalizeGeminiModel = (model) => {
   const legacyModels = {
-    'gemini': 'gemini-2.0-flash-exp',
-    'gemini-pro': 'gemini-2.0-flash-exp',
-    'gemini-1.0-pro': 'gemini-2.0-flash-exp',
-    'gemini-1.5-flash': 'gemini-1.5-flash-latest',
-    'gemini-1.5-pro': 'gemini-1.5-pro-latest',
-    'gemini-2.0-flash': 'gemini-2.0-flash-exp',
+    'gemini': 'gemini-1.5-flash',
+    'gemini-2.0-flash-exp': 'gemini-1.5-flash',
+    'gemini-1.5-flash-latest': 'gemini-1.5-flash',
+    'gemini-1.5-pro-latest': 'gemini-1.5-pro',
+    'gemini-1.0-pro': 'gemini-pro',
   }
   return legacyModels[model] || model
 }
 
 // Call Google Gemini API
-const callGeminiAPI = async (prompt, apiKey, model = 'gemini-2.0-flash-exp') => {
+const callGeminiAPI = async (prompt, apiKey, model = 'gemini-1.5-flash') => {
   // Normalize legacy model names
   const normalizedModel = normalizeGeminiModel(model)
   console.log(`Using Gemini model: ${normalizedModel} (requested: ${model})`)
 
   const response = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/${normalizedModel}:generateContent?key=${apiKey}`,
+    `https://generativelanguage.googleapis.com/v1/models/${normalizedModel}:generateContent?key=${apiKey}`,
     {
       method: 'POST',
       headers: {
@@ -377,7 +376,7 @@ export const generateTradesFromPrompt = async (prompt, settings, numResults = 3)
   try {
     switch (settings.aiProvider) {
       case 'google':
-        aiResponse = await callGeminiAPI(aiPrompt, apiKey, settings.aiModel || 'gemini-2.0-flash-exp')
+        aiResponse = await callGeminiAPI(aiPrompt, apiKey, settings.aiModel || 'gemini-1.5-flash')
         break
       case 'openai':
         aiResponse = await callOpenAIAPI(aiPrompt, apiKey, settings.aiModel || 'gpt-4')

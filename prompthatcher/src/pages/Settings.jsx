@@ -28,7 +28,7 @@ const aiProviders = [
   {
     id: 'google',
     name: 'Google',
-    models: ['gemini-2.0-flash-exp', 'gemini-1.5-flash-latest', 'gemini-1.5-pro-latest'],
+    models: ['gemini-1.5-flash', 'gemini-1.5-pro', 'gemini-pro'],
     icon: '🔮',
     color: 'from-blue-500 to-cyan-500',
     apiUrl: 'https://aistudio.google.com/apikey',
@@ -105,11 +105,10 @@ export default function Settings() {
       let testUrl, testBody, headers = { 'Content-Type': 'application/json' }
 
       if (providerId === 'google') {
-        // Use gemini-2.0-flash-exp which is the current working model
-        testUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp:generateContent?key=${apiKey}`
+        // Use v1 endpoint with gemini-1.5-flash
+        testUrl = `https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent?key=${apiKey}`
         testBody = JSON.stringify({
-          contents: [{ parts: [{ text: 'Say "OK" if you can read this.' }] }],
-          generationConfig: { maxOutputTokens: 10 }
+          contents: [{ parts: [{ text: 'Say OK' }] }]
         })
       } else if (providerId === 'openai') {
         testUrl = 'https://api.openai.com/v1/chat/completions'
