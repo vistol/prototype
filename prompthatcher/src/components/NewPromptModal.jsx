@@ -185,11 +185,18 @@ export default function NewPromptModal() {
   const handleSubmit = async () => {
     if (!hasConfiguredProvider) return
 
+    // Debug: log current aiProvider state
+    console.log('[handleSubmit] aiProvider state:', aiProvider)
+    console.log('[handleSubmit] settings.apiKeys:', Object.keys(settings?.apiKeys || {}).filter(k => settings?.apiKeys?.[k]))
+
     let promptToUse = null
 
     if (mode === 'library') {
       const selectedPrompt = prompts.find(p => p.id === selectedPromptId)
       if (!selectedPrompt) return
+
+      console.log('[handleSubmit] selectedPrompt.aiModel:', selectedPrompt.aiModel)
+      console.log('[handleSubmit] Using aiProvider:', aiProvider)
 
       // Ensure content is preserved from the library prompt
       promptToUse = {
@@ -198,11 +205,13 @@ export default function NewPromptModal() {
         executionTime,
         capital,
         leverage,
-        aiModel: aiProvider,
+        aiModel: aiProvider,  // Override with currently selected provider
         minIpe,
         numResults,
         targetPct: executionTime === 'target' ? targetPct : null
       }
+
+      console.log('[handleSubmit] promptToUse.aiModel:', promptToUse.aiModel)
     } else {
       // Manual mode
       if (!name.trim()) return
@@ -538,7 +547,7 @@ export default function NewPromptModal() {
                 {/* AI Provider selection */}
                 <div>
                   <label className="text-[10px] text-gray-500 uppercase tracking-wider mb-1 flex items-center gap-1">
-                    <Cpu size={10} /> AI Provider
+                    <Cpu size={10} /> AI Provider: <span className="text-accent-cyan">{AI_PROVIDERS.find(p => p.id === aiProvider)?.label || aiProvider}</span>
                   </label>
                   <div className="flex gap-1">
                     {AI_PROVIDERS.map((provider) => {
@@ -547,7 +556,12 @@ export default function NewPromptModal() {
                       return (
                         <button
                           key={provider.id}
-                          onClick={() => isConfigured && setAiProvider(provider.id)}
+                          onClick={() => {
+                            if (isConfigured) {
+                              console.log('[UI] Setting aiProvider to:', provider.id)
+                              setAiProvider(provider.id)
+                            }
+                          }}
                           disabled={!isConfigured}
                           className={`flex-1 py-2 rounded-lg border text-center transition-all relative ${
                             isSelected && isConfigured
