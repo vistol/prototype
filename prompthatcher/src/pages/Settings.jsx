@@ -4,6 +4,7 @@ import { Cpu, FileText, Database, ChevronRight, Eye, EyeOff, Check, X, AlertCirc
 import useStore from '../store/useStore'
 import Header from '../components/Header'
 import PromptEditorModal from '../components/PromptEditorModal'
+import { testAPIConnection } from '../lib/aiService'
 
 const tabs = ['AI Provider', 'Prompts', 'System']
 
@@ -100,7 +101,7 @@ export default function Settings() {
   const [apiTestResult, setApiTestResult] = useState({})
   const [apiKeySaved, setApiKeySaved] = useState({})
 
-  // Test API connection
+  // Test API connection using centralized function with Vite proxy
   const testApiConnection = async (providerId, apiKey) => {
     if (!apiKey || apiKey.length < 10) {
       setApiTestResult({ ...apiTestResult, [providerId]: { success: false, error: 'API key too short' } })
@@ -111,53 +112,15 @@ export default function Settings() {
     setApiTestResult({ ...apiTestResult, [providerId]: null })
 
     try {
-      let testUrl, testBody, headers = { 'Content-Type': 'application/json' }
+      const result = await testAPIConnection(providerId, apiKey)
 
-      if (providerId === 'anthropic') {
-        // Note: Anthropic API may have CORS restrictions for browser calls
-        testUrl = 'https://api.anthropic.com/v1/messages'
-        headers['x-api-key'] = apiKey
-        headers['anthropic-version'] = '2023-06-01'
-        headers['anthropic-dangerous-direct-browser-access'] = 'true'
-        testBody = JSON.stringify({
-          model: 'claude-3-haiku-20240307',
-          max_tokens: 10,
-          messages: [{ role: 'user', content: 'Say OK' }]
-        })
-      } else if (providerId === 'google') {
-        // Use v1 endpoint with gemini-1.5-flash
-        testUrl = `https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent?key=${apiKey}`
-        testBody = JSON.stringify({
-          contents: [{ parts: [{ text: 'Say OK' }] }]
-        })
-      } else if (providerId === 'openai') {
-        testUrl = 'https://api.openai.com/v1/chat/completions'
-        headers['Authorization'] = `Bearer ${apiKey}`
-        testBody = JSON.stringify({
-          model: 'gpt-3.5-turbo',
-          messages: [{ role: 'user', content: 'Say OK' }],
-          max_tokens: 5
-        })
-      } else if (providerId === 'xai') {
-        testUrl = 'https://api.x.ai/v1/chat/completions'
-        headers['Authorization'] = `Bearer ${apiKey}`
-        testBody = JSON.stringify({
-          model: 'grok-beta',
-          messages: [{ role: 'user', content: 'Say OK' }],
-          max_tokens: 5
-        })
-      }
-
-      const response = await fetch(testUrl, { method: 'POST', headers, body: testBody })
-
-      if (response.ok) {
+      if (result.success) {
         setApiTestResult({ ...apiTestResult, [providerId]: { success: true } })
         setApiKeySaved({ ...apiKeySaved, [providerId]: true })
       } else {
-        const error = await response.json()
         setApiTestResult({
           ...apiTestResult,
-          [providerId]: { success: false, error: error.error?.message || `Error ${response.status}` }
+          [providerId]: { success: false, error: result.message }
         })
       }
     } catch (error) {

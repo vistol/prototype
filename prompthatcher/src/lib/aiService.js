@@ -197,48 +197,85 @@ const parseAIResponse = (responseText, prices, config) => {
   }
 }
 
-// Map legacy model names to current valid model names
-const normalizeGeminiModel = (model) => {
-  const legacyModels = {
-    'gemini': 'gemini-1.5-flash',
-    'gemini-2.0-flash-exp': 'gemini-1.5-flash',
-    'gemini-1.5-flash-latest': 'gemini-1.5-flash',
-    'gemini-1.5-pro-latest': 'gemini-1.5-pro',
-    'gemini-1.0-pro': 'gemini-pro',
-  }
-  return legacyModels[model] || model
-}
+// ============================================
+// AI API CALLS - Using Vite Proxy to bypass CORS
+// ============================================
 
-// Call Google Gemini API
-const callGeminiAPI = async (prompt, apiKey, model = 'gemini-1.5-flash') => {
-  // Normalize legacy model names
-  const normalizedModel = normalizeGeminiModel(model)
-  console.log(`Using Gemini model: ${normalizedModel} (requested: ${model})`)
+// Call Anthropic Claude API via proxy
+const callClaudeAPI = async (prompt, apiKey, model = 'claude-sonnet-4-20250514') => {
+  console.log('Calling Claude API via proxy...')
 
-  const response = await fetch(
-    `https://generativelanguage.googleapis.com/v1/models/${normalizedModel}:generateContent?key=${apiKey}`,
-    {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        contents: [{
-          parts: [{ text: prompt }]
-        }],
-        generationConfig: {
-          temperature: 0.7,
-          topK: 40,
-          topP: 0.95,
-          maxOutputTokens: 2048,
+  const response = await fetch('/api/anthropic/v1/messages', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'x-api-key': apiKey,
+      'anthropic-version': '2023-06-01'
+    },
+    body: JSON.stringify({
+      model: model,
+      max_tokens: 4096,
+      system: 'You are a quantitative trading analyst. Always respond with valid JSON only. No markdown, no explanations outside the JSON array.',
+      messages: [
+        {
+          role: 'user',
+          content: prompt
         }
-      })
-    }
-  )
+      ]
+    })
+  })
 
   if (!response.ok) {
-    const error = await response.json()
-    throw new Error(error.error?.message || `Gemini API error: ${response.status}`)
+    let errorMsg = `Claude API error: ${response.status}`
+    try {
+      const error = await response.json()
+      errorMsg = error.error?.message || errorMsg
+    } catch (e) {
+      // If we can't parse the error, use the status code message
+    }
+    throw new Error(errorMsg)
+  }
+
+  const data = await response.json()
+
+  if (!data.content?.[0]?.text) {
+    throw new Error('No response from Claude')
+  }
+
+  return data.content[0].text
+}
+
+// Call Google Gemini API via proxy
+const callGeminiAPI = async (prompt, apiKey, model = 'gemini-1.5-flash') => {
+  console.log(`Calling Gemini API via proxy with model: ${model}`)
+
+  const response = await fetch(`/api/gemini/v1/models/${model}:generateContent?key=${apiKey}`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({
+      contents: [{
+        parts: [{ text: prompt }]
+      }],
+      generationConfig: {
+        temperature: 0.7,
+        topK: 40,
+        topP: 0.95,
+        maxOutputTokens: 2048
+      }
+    })
+  })
+
+  if (!response.ok) {
+    let errorMsg = `Gemini API error: ${response.status}`
+    try {
+      const error = await response.json()
+      errorMsg = error.error?.message || errorMsg
+    } catch (e) {
+      // If we can't parse the error, use the status code message
+    }
+    throw new Error(errorMsg)
   }
 
   const data = await response.json()
@@ -250,9 +287,11 @@ const callGeminiAPI = async (prompt, apiKey, model = 'gemini-1.5-flash') => {
   return data.candidates[0].content.parts[0].text
 }
 
-// Call OpenAI API
+// Call OpenAI API via proxy
 const callOpenAIAPI = async (prompt, apiKey, model = 'gpt-4') => {
-  const response = await fetch('https://api.openai.com/v1/chat/completions', {
+  console.log(`Calling OpenAI API via proxy with model: ${model}`)
+
+  const response = await fetch('/api/openai/v1/chat/completions', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -276,8 +315,14 @@ const callOpenAIAPI = async (prompt, apiKey, model = 'gpt-4') => {
   })
 
   if (!response.ok) {
-    const error = await response.json()
-    throw new Error(error.error?.message || `OpenAI API error: ${response.status}`)
+    let errorMsg = `OpenAI API error: ${response.status}`
+    try {
+      const error = await response.json()
+      errorMsg = error.error?.message || errorMsg
+    } catch (e) {
+      // If we can't parse the error, use the status code message
+    }
+    throw new Error(errorMsg)
   }
 
   const data = await response.json()
@@ -289,9 +334,11 @@ const callOpenAIAPI = async (prompt, apiKey, model = 'gpt-4') => {
   return data.choices[0].message.content
 }
 
-// Call xAI Grok API
+// Call xAI Grok API via proxy
 const callGrokAPI = async (prompt, apiKey) => {
-  const response = await fetch('https://api.x.ai/v1/chat/completions', {
+  console.log('Calling Grok API via proxy...')
+
+  const response = await fetch('/api/xai/v1/chat/completions', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -315,8 +362,14 @@ const callGrokAPI = async (prompt, apiKey) => {
   })
 
   if (!response.ok) {
-    const error = await response.json()
-    throw new Error(error.error?.message || `Grok API error: ${response.status}`)
+    let errorMsg = `Grok API error: ${response.status}`
+    try {
+      const error = await response.json()
+      errorMsg = error.error?.message || errorMsg
+    } catch (e) {
+      // If we can't parse the error, use the status code message
+    }
+    throw new Error(errorMsg)
   }
 
   const data = await response.json()
@@ -326,43 +379,6 @@ const callGrokAPI = async (prompt, apiKey) => {
   }
 
   return data.choices[0].message.content
-}
-
-// Call Anthropic Claude API
-const callClaudeAPI = async (prompt, apiKey, model = 'claude-sonnet-4-20250514') => {
-  const response = await fetch('https://api.anthropic.com/v1/messages', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'x-api-key': apiKey,
-      'anthropic-version': '2023-06-01',
-      'anthropic-dangerous-direct-browser-access': 'true'
-    },
-    body: JSON.stringify({
-      model: model,
-      max_tokens: 4096,
-      system: 'You are a quantitative trading analyst. Always respond with valid JSON only. No markdown, no explanations outside the JSON array.',
-      messages: [
-        {
-          role: 'user',
-          content: prompt
-        }
-      ]
-    })
-  })
-
-  if (!response.ok) {
-    const error = await response.json()
-    throw new Error(error.error?.message || `Claude API error: ${response.status}`)
-  }
-
-  const data = await response.json()
-
-  if (!data.content?.[0]?.text) {
-    throw new Error('No response from Claude')
-  }
-
-  return data.content[0].text
 }
 
 // Main function to generate trades from prompt using AI
@@ -476,4 +492,102 @@ export const calculateStandardIPE = (trade) => {
   const ipe = (fundamentalSum * w1 + technicalSum * w2) * 10
 
   return Math.min(Math.round(ipe), 95)
+}
+
+// ============================================
+// TEST CONNECTION FUNCTION - Used by Settings page
+// ============================================
+export const testAPIConnection = async (providerId, apiKey) => {
+  console.log(`Testing connection for ${providerId}...`)
+
+  try {
+    switch (providerId) {
+      case 'anthropic': {
+        const response = await fetch('/api/anthropic/v1/messages', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'x-api-key': apiKey,
+            'anthropic-version': '2023-06-01'
+          },
+          body: JSON.stringify({
+            model: 'claude-3-haiku-20240307',
+            max_tokens: 10,
+            messages: [{ role: 'user', content: 'Hi' }]
+          })
+        })
+
+        if (!response.ok) {
+          const error = await response.json().catch(() => ({}))
+          throw new Error(error.error?.message || `HTTP ${response.status}`)
+        }
+        return { success: true, message: 'Claude API connected successfully!' }
+      }
+
+      case 'google': {
+        const response = await fetch(`/api/gemini/v1/models/gemini-1.5-flash:generateContent?key=${apiKey}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            contents: [{ parts: [{ text: 'Hi' }] }],
+            generationConfig: { maxOutputTokens: 10 }
+          })
+        })
+
+        if (!response.ok) {
+          const error = await response.json().catch(() => ({}))
+          throw new Error(error.error?.message || `HTTP ${response.status}`)
+        }
+        return { success: true, message: 'Gemini API connected successfully!' }
+      }
+
+      case 'openai': {
+        const response = await fetch('/api/openai/v1/chat/completions', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${apiKey}`
+          },
+          body: JSON.stringify({
+            model: 'gpt-3.5-turbo',
+            max_tokens: 10,
+            messages: [{ role: 'user', content: 'Hi' }]
+          })
+        })
+
+        if (!response.ok) {
+          const error = await response.json().catch(() => ({}))
+          throw new Error(error.error?.message || `HTTP ${response.status}`)
+        }
+        return { success: true, message: 'OpenAI API connected successfully!' }
+      }
+
+      case 'xai': {
+        const response = await fetch('/api/xai/v1/chat/completions', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${apiKey}`
+          },
+          body: JSON.stringify({
+            model: 'grok-beta',
+            max_tokens: 10,
+            messages: [{ role: 'user', content: 'Hi' }]
+          })
+        })
+
+        if (!response.ok) {
+          const error = await response.json().catch(() => ({}))
+          throw new Error(error.error?.message || `HTTP ${response.status}`)
+        }
+        return { success: true, message: 'Grok API connected successfully!' }
+      }
+
+      default:
+        throw new Error(`Unknown provider: ${providerId}`)
+    }
+  } catch (error) {
+    console.error(`Connection test failed for ${providerId}:`, error)
+    return { success: false, message: error.message }
+  }
 }
