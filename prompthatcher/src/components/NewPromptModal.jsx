@@ -109,8 +109,12 @@ export default function NewPromptModal() {
   const [step, setStep] = useState('config')
   const [currentPrompt, setCurrentPrompt] = useState(null)
 
-  // Get all prompts for library (same as Settings page)
-  const savedPrompts = prompts
+  // Get all prompts for library - use useMemo to ensure reactivity
+  const savedPrompts = useMemo(() => {
+    // Return all prompts from the store, same as Settings page
+    console.log('[NewPromptModal] Prompts from store:', prompts.length, prompts.map(p => p.name))
+    return [...prompts] // Spread to create new array reference
+  }, [prompts])
 
   // Check if any provider is configured
   const hasConfiguredProvider = configuredProviders.length > 0
@@ -246,7 +250,7 @@ export default function NewPromptModal() {
         <div className="shrink-0 px-4 py-2">
           <div className="flex bg-quant-surface rounded-lg p-0.5">
             {[
-              { id: 'library', icon: BookOpen, label: 'Library' },
+              { id: 'library', icon: BookOpen, label: `Library (${savedPrompts.length})` },
               { id: 'manual', icon: PenTool, label: 'Manual' }
             ].map(tab => (
               <button
@@ -268,38 +272,44 @@ export default function NewPromptModal() {
 
           {/* LIBRARY MODE - Prompt selector */}
           {mode === 'library' && (
-            <div className="space-y-2">
+            <div className="space-y-2" key={`library-list-${savedPrompts.length}`}>
               {savedPrompts.length === 0 ? (
                 <div className="text-center py-6 text-gray-500">
                   <BookOpen size={24} className="mx-auto mb-2 opacity-50" />
                   <p className="text-xs">No saved prompts. Create one in Manual mode first.</p>
                 </div>
               ) : (
-                savedPrompts.map((prompt) => (
-                  <button
-                    key={prompt.id}
-                    onClick={() => handleSelectPrompt(prompt)}
-                    className={`w-full p-3 rounded-xl border text-left transition-all ${
-                      selectedPromptId === prompt.id
-                        ? 'border-accent-cyan bg-accent-cyan/10'
-                        : 'border-quant-border bg-quant-surface'
-                    }`}
-                  >
-                    <div className="flex items-center justify-between mb-1">
-                      <span className={`font-medium text-sm ${
-                        selectedPromptId === prompt.id ? 'text-white' : 'text-gray-300'
-                      }`}>
-                        {prompt.name}
-                      </span>
-                      {selectedPromptId === prompt.id && (
-                        <div className="w-2 h-2 rounded-full bg-accent-cyan" />
+                <>
+                  {/* Debug info - shows total prompts available */}
+                  <div className="text-[10px] text-gray-600 px-1 mb-1">
+                    {savedPrompts.length} prompts available
+                  </div>
+                  {savedPrompts.map((prompt, index) => (
+                    <button
+                      key={`prompt-${prompt.id}-${index}`}
+                      onClick={() => handleSelectPrompt(prompt)}
+                      className={`w-full p-3 rounded-xl border text-left transition-all ${
+                        selectedPromptId === prompt.id
+                          ? 'border-accent-cyan bg-accent-cyan/10'
+                          : 'border-quant-border bg-quant-surface'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between mb-1">
+                        <span className={`font-medium text-sm ${
+                          selectedPromptId === prompt.id ? 'text-white' : 'text-gray-300'
+                        }`}>
+                          {prompt.name}
+                        </span>
+                        {selectedPromptId === prompt.id && (
+                          <div className="w-2 h-2 rounded-full bg-accent-cyan" />
+                        )}
+                      </div>
+                      {prompt.content && (
+                        <p className="text-xs text-gray-500 line-clamp-2">{prompt.content}</p>
                       )}
-                    </div>
-                    {prompt.content && (
-                      <p className="text-xs text-gray-500 line-clamp-2">{prompt.content}</p>
-                    )}
-                  </button>
-                ))
+                    </button>
+                  ))}
+                </>
               )}
             </div>
           )}
