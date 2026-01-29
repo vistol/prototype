@@ -411,13 +411,16 @@ const callGrokAPI = async (prompt, apiKey) => {
 export const generateTradesFromPrompt = async (prompt, settings, numResults = 3) => {
   console.log('Generating trades with AI...')
   console.log('Prompt:', prompt.name)
-  console.log('Provider:', settings.aiProvider)
 
-  // Check for API key
-  const apiKey = settings.apiKeys?.[settings.aiProvider]
+  // Use the AI provider from the prompt (selected in modal) or fall back to settings
+  const aiProvider = prompt.aiModel || settings.aiProvider || 'google'
+  console.log('AI Provider:', aiProvider)
+
+  // Check for API key using the correct provider
+  const apiKey = settings.apiKeys?.[aiProvider]
 
   if (!apiKey) {
-    throw new Error(`No API key configured for ${settings.aiProvider}. Please add your API key in Settings.`)
+    throw new Error(`No API key configured for ${aiProvider}. Please add your API key in Settings.`)
   }
 
   // Select random assets
@@ -450,24 +453,24 @@ export const generateTradesFromPrompt = async (prompt, settings, numResults = 3)
   const aiPrompt = buildAIPrompt(prompt, settings, realPrices, config)
   console.log('AI Prompt built, calling API...')
 
-  // Call appropriate AI API
+  // Call appropriate AI API based on the selected provider
   let aiResponse
   try {
-    switch (settings.aiProvider) {
+    switch (aiProvider) {
       case 'anthropic':
-        aiResponse = await callClaudeAPI(aiPrompt, apiKey, settings.aiModel || 'claude-sonnet-4-20250514')
+        aiResponse = await callClaudeAPI(aiPrompt, apiKey, 'claude-sonnet-4-20250514')
         break
       case 'google':
-        aiResponse = await callGeminiAPI(aiPrompt, apiKey, settings.aiModel || 'gemini-1.5-flash')
+        aiResponse = await callGeminiAPI(aiPrompt, apiKey, 'gemini-1.5-flash')
         break
       case 'openai':
-        aiResponse = await callOpenAIAPI(aiPrompt, apiKey, settings.aiModel || 'gpt-4')
+        aiResponse = await callOpenAIAPI(aiPrompt, apiKey, 'gpt-4')
         break
       case 'xai':
         aiResponse = await callGrokAPI(aiPrompt, apiKey)
         break
       default:
-        throw new Error(`Unknown AI provider: ${settings.aiProvider}`)
+        throw new Error(`Unknown AI provider: ${aiProvider}`)
     }
   } catch (error) {
     console.error('AI API call failed:', error)
