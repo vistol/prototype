@@ -28,7 +28,7 @@ const aiProviders = [
   {
     id: 'google',
     name: 'Google',
-    models: ['gemini-1.5-flash', 'gemini-1.5-pro', 'gemini-2.0-flash'],
+    models: ['gemini-2.0-flash-exp', 'gemini-1.5-flash-latest', 'gemini-1.5-pro-latest'],
     icon: '🔮',
     color: 'from-blue-500 to-cyan-500',
     apiUrl: 'https://aistudio.google.com/apikey',
@@ -105,7 +105,8 @@ export default function Settings() {
       let testUrl, testBody, headers = { 'Content-Type': 'application/json' }
 
       if (providerId === 'google') {
-        testUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`
+        // Use gemini-2.0-flash-exp which is the current working model
+        testUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp:generateContent?key=${apiKey}`
         testBody = JSON.stringify({
           contents: [{ parts: [{ text: 'Say "OK" if you can read this.' }] }],
           generationConfig: { maxOutputTokens: 10 }
