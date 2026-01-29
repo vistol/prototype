@@ -198,31 +198,46 @@ const parseAIResponse = (responseText, prices, config) => {
 }
 
 // ============================================
-// AI API CALLS - Using Vite Proxy to bypass CORS
+// AI API CALLS - Hybrid approach (proxy + direct)
 // ============================================
 
-// Call Anthropic Claude API via proxy
-const callClaudeAPI = async (prompt, apiKey, model = 'claude-sonnet-4-20250514') => {
-  console.log('Calling Claude API via proxy...')
+// Helper to try proxy first, then direct call
+const fetchWithFallback = async (proxyUrl, directUrl, options, directOptions = null) => {
+  // Try proxy first (works if Vite server is properly configured)
+  try {
+    const proxyResponse = await fetch(proxyUrl, options)
+    if (proxyResponse.ok || proxyResponse.status < 500) {
+      return proxyResponse
+    }
+  } catch (e) {
+    console.log('Proxy not available, trying direct call...')
+  }
 
-  const response = await fetch('/api/anthropic/v1/messages', {
+  // Fall back to direct call
+  return fetch(directUrl, directOptions || options)
+}
+
+// Call Anthropic Claude API
+const callClaudeAPI = async (prompt, apiKey, model = 'claude-sonnet-4-20250514') => {
+  console.log('Calling Claude API...')
+
+  const body = JSON.stringify({
+    model: model,
+    max_tokens: 4096,
+    system: 'You are a quantitative trading analyst. Always respond with valid JSON only. No markdown, no explanations outside the JSON array.',
+    messages: [{ role: 'user', content: prompt }]
+  })
+
+  // Direct call with browser access header (Anthropic supports this)
+  const response = await fetch('https://api.anthropic.com/v1/messages', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
       'x-api-key': apiKey,
-      'anthropic-version': '2023-06-01'
+      'anthropic-version': '2023-06-01',
+      'anthropic-dangerous-direct-browser-access': 'true'
     },
-    body: JSON.stringify({
-      model: model,
-      max_tokens: 4096,
-      system: 'You are a quantitative trading analyst. Always respond with valid JSON only. No markdown, no explanations outside the JSON array.',
-      messages: [
-        {
-          role: 'user',
-          content: prompt
-        }
-      ]
-    })
+    body: body
   })
 
   if (!response.ok) {
@@ -230,9 +245,7 @@ const callClaudeAPI = async (prompt, apiKey, model = 'claude-sonnet-4-20250514')
     try {
       const error = await response.json()
       errorMsg = error.error?.message || errorMsg
-    } catch (e) {
-      // If we can't parse the error, use the status code message
-    }
+    } catch (e) {}
     throw new Error(errorMsg)
   }
 
@@ -245,36 +258,34 @@ const callClaudeAPI = async (prompt, apiKey, model = 'claude-sonnet-4-20250514')
   return data.content[0].text
 }
 
-// Call Google Gemini API via proxy
+// Call Google Gemini API (supports browser calls natively)
 const callGeminiAPI = async (prompt, apiKey, model = 'gemini-1.5-flash') => {
-  console.log(`Calling Gemini API via proxy with model: ${model}`)
+  console.log(`Calling Gemini API with model: ${model}`)
 
-  const response = await fetch(`/api/gemini/v1/models/${model}:generateContent?key=${apiKey}`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json'
-    },
-    body: JSON.stringify({
-      contents: [{
-        parts: [{ text: prompt }]
-      }],
-      generationConfig: {
-        temperature: 0.7,
-        topK: 40,
-        topP: 0.95,
-        maxOutputTokens: 2048
-      }
-    })
-  })
+  // Gemini API supports direct browser calls with API key in URL
+  const response = await fetch(
+    `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        contents: [{ parts: [{ text: prompt }] }],
+        generationConfig: {
+          temperature: 0.7,
+          topK: 40,
+          topP: 0.95,
+          maxOutputTokens: 2048
+        }
+      })
+    }
+  )
 
   if (!response.ok) {
     let errorMsg = `Gemini API error: ${response.status}`
     try {
       const error = await response.json()
       errorMsg = error.error?.message || errorMsg
-    } catch (e) {
-      // If we can't parse the error, use the status code message
-    }
+    } catch (e) {}
     throw new Error(errorMsg)
   }
 
@@ -287,41 +298,49 @@ const callGeminiAPI = async (prompt, apiKey, model = 'gemini-1.5-flash') => {
   return data.candidates[0].content.parts[0].text
 }
 
-// Call OpenAI API via proxy
+// Call OpenAI API
 const callOpenAIAPI = async (prompt, apiKey, model = 'gpt-4') => {
-  console.log(`Calling OpenAI API via proxy with model: ${model}`)
+  console.log(`Calling OpenAI API with model: ${model}`)
 
-  const response = await fetch('/api/openai/v1/chat/completions', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${apiKey}`
-    },
-    body: JSON.stringify({
-      model: model,
-      messages: [
-        {
-          role: 'system',
-          content: 'You are a quantitative trading analyst. Always respond with valid JSON only.'
-        },
-        {
-          role: 'user',
-          content: prompt
-        }
-      ],
-      temperature: 0.7,
-      max_tokens: 2048
-    })
+  const body = JSON.stringify({
+    model: model,
+    messages: [
+      { role: 'system', content: 'You are a quantitative trading analyst. Always respond with valid JSON only.' },
+      { role: 'user', content: prompt }
+    ],
+    temperature: 0.7,
+    max_tokens: 2048
   })
+
+  // Try proxy first for OpenAI (has CORS restrictions)
+  let response
+  try {
+    response = await fetch('/api/openai/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${apiKey}`
+      },
+      body: body
+    })
+  } catch (e) {
+    // If proxy fails, try direct (may fail due to CORS)
+    response = await fetch('https://api.openai.com/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${apiKey}`
+      },
+      body: body
+    })
+  }
 
   if (!response.ok) {
     let errorMsg = `OpenAI API error: ${response.status}`
     try {
       const error = await response.json()
       errorMsg = error.error?.message || errorMsg
-    } catch (e) {
-      // If we can't parse the error, use the status code message
-    }
+    } catch (e) {}
     throw new Error(errorMsg)
   }
 
@@ -334,41 +353,48 @@ const callOpenAIAPI = async (prompt, apiKey, model = 'gpt-4') => {
   return data.choices[0].message.content
 }
 
-// Call xAI Grok API via proxy
+// Call xAI Grok API
 const callGrokAPI = async (prompt, apiKey) => {
-  console.log('Calling Grok API via proxy...')
+  console.log('Calling Grok API...')
 
-  const response = await fetch('/api/xai/v1/chat/completions', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${apiKey}`
-    },
-    body: JSON.stringify({
-      model: 'grok-beta',
-      messages: [
-        {
-          role: 'system',
-          content: 'You are a quantitative trading analyst. Always respond with valid JSON only.'
-        },
-        {
-          role: 'user',
-          content: prompt
-        }
-      ],
-      temperature: 0.7,
-      max_tokens: 2048
-    })
+  const body = JSON.stringify({
+    model: 'grok-beta',
+    messages: [
+      { role: 'system', content: 'You are a quantitative trading analyst. Always respond with valid JSON only.' },
+      { role: 'user', content: prompt }
+    ],
+    temperature: 0.7,
+    max_tokens: 2048
   })
+
+  // Try proxy first for xAI
+  let response
+  try {
+    response = await fetch('/api/xai/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${apiKey}`
+      },
+      body: body
+    })
+  } catch (e) {
+    response = await fetch('https://api.x.ai/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${apiKey}`
+      },
+      body: body
+    })
+  }
 
   if (!response.ok) {
     let errorMsg = `Grok API error: ${response.status}`
     try {
       const error = await response.json()
       errorMsg = error.error?.message || errorMsg
-    } catch (e) {
-      // If we can't parse the error, use the status code message
-    }
+    } catch (e) {}
     throw new Error(errorMsg)
   }
 
@@ -396,7 +422,7 @@ export const generateTradesFromPrompt = async (prompt, settings, numResults = 3)
 
   // Select random assets
   const shuffledAssets = [...CRYPTO_ASSETS].sort(() => Math.random() - 0.5)
-  const selectedAssets = shuffledAssets.slice(0, Math.min(numResults * 2, 10)) // Get more for AI to choose from
+  const selectedAssets = shuffledAssets.slice(0, Math.min(numResults * 2, 10))
 
   // Fetch real prices from Binance
   console.log('Fetching real prices from Binance for:', selectedAssets)
@@ -503,12 +529,14 @@ export const testAPIConnection = async (providerId, apiKey) => {
   try {
     switch (providerId) {
       case 'anthropic': {
-        const response = await fetch('/api/anthropic/v1/messages', {
+        // Anthropic supports direct browser calls with special header
+        const response = await fetch('https://api.anthropic.com/v1/messages', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
             'x-api-key': apiKey,
-            'anthropic-version': '2023-06-01'
+            'anthropic-version': '2023-06-01',
+            'anthropic-dangerous-direct-browser-access': 'true'
           },
           body: JSON.stringify({
             model: 'claude-3-haiku-20240307',
@@ -525,14 +553,18 @@ export const testAPIConnection = async (providerId, apiKey) => {
       }
 
       case 'google': {
-        const response = await fetch(`/api/gemini/v1/models/gemini-1.5-flash:generateContent?key=${apiKey}`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            contents: [{ parts: [{ text: 'Hi' }] }],
-            generationConfig: { maxOutputTokens: 10 }
-          })
-        })
+        // Gemini supports direct browser calls
+        const response = await fetch(
+          `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`,
+          {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              contents: [{ parts: [{ text: 'Hi' }] }],
+              generationConfig: { maxOutputTokens: 10 }
+            })
+          }
+        )
 
         if (!response.ok) {
           const error = await response.json().catch(() => ({}))
@@ -542,18 +574,35 @@ export const testAPIConnection = async (providerId, apiKey) => {
       }
 
       case 'openai': {
-        const response = await fetch('/api/openai/v1/chat/completions', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${apiKey}`
-          },
-          body: JSON.stringify({
-            model: 'gpt-3.5-turbo',
-            max_tokens: 10,
-            messages: [{ role: 'user', content: 'Hi' }]
+        // OpenAI - try proxy first, then direct
+        let response
+        try {
+          response = await fetch('/api/openai/v1/chat/completions', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${apiKey}`
+            },
+            body: JSON.stringify({
+              model: 'gpt-3.5-turbo',
+              max_tokens: 10,
+              messages: [{ role: 'user', content: 'Hi' }]
+            })
           })
-        })
+        } catch (e) {
+          response = await fetch('https://api.openai.com/v1/chat/completions', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${apiKey}`
+            },
+            body: JSON.stringify({
+              model: 'gpt-3.5-turbo',
+              max_tokens: 10,
+              messages: [{ role: 'user', content: 'Hi' }]
+            })
+          })
+        }
 
         if (!response.ok) {
           const error = await response.json().catch(() => ({}))
@@ -563,18 +612,35 @@ export const testAPIConnection = async (providerId, apiKey) => {
       }
 
       case 'xai': {
-        const response = await fetch('/api/xai/v1/chat/completions', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${apiKey}`
-          },
-          body: JSON.stringify({
-            model: 'grok-beta',
-            max_tokens: 10,
-            messages: [{ role: 'user', content: 'Hi' }]
+        // xAI - try proxy first, then direct
+        let response
+        try {
+          response = await fetch('/api/xai/v1/chat/completions', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${apiKey}`
+            },
+            body: JSON.stringify({
+              model: 'grok-beta',
+              max_tokens: 10,
+              messages: [{ role: 'user', content: 'Hi' }]
+            })
           })
-        })
+        } catch (e) {
+          response = await fetch('https://api.x.ai/v1/chat/completions', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${apiKey}`
+            },
+            body: JSON.stringify({
+              model: 'grok-beta',
+              max_tokens: 10,
+              messages: [{ role: 'user', content: 'Hi' }]
+            })
+          })
+        }
 
         if (!response.ok) {
           const error = await response.json().catch(() => ({}))
