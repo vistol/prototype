@@ -33,6 +33,13 @@ const aiProviders = [
     helpUrl: 'https://makersuite.google.com/app/apikey'
   },
   {
+    id: 'anthropic',
+    name: 'Claude (Anthropic)',
+    icon: '🧠',
+    placeholder: 'sk-ant-...',
+    helpUrl: 'https://console.anthropic.com/settings/keys'
+  },
+  {
     id: 'openai',
     name: 'OpenAI',
     icon: '🤖',
