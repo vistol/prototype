@@ -109,8 +109,8 @@ export default function NewPromptModal() {
   const [step, setStep] = useState('config')
   const [currentPrompt, setCurrentPrompt] = useState(null)
 
-  // Get active prompts for library
-  const savedPrompts = prompts.filter(p => p.status === 'active')
+  // Get active prompts for library (include prompts without status for backwards compatibility)
+  const savedPrompts = prompts.filter(p => !p.status || p.status === 'active')
 
   // Check if any provider is configured
   const hasConfiguredProvider = configuredProviders.length > 0
