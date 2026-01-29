@@ -197,10 +197,24 @@ const parseAIResponse = (responseText, prices, config) => {
   }
 }
 
+// Map legacy model names to current valid model names
+const normalizeGeminiModel = (model) => {
+  const legacyModels = {
+    'gemini': 'gemini-1.5-flash',
+    'gemini-pro': 'gemini-1.5-flash',
+    'gemini-1.0-pro': 'gemini-1.5-flash',
+  }
+  return legacyModels[model] || model
+}
+
 // Call Google Gemini API
 const callGeminiAPI = async (prompt, apiKey, model = 'gemini-1.5-flash') => {
+  // Normalize legacy model names
+  const normalizedModel = normalizeGeminiModel(model)
+  console.log(`Using Gemini model: ${normalizedModel} (requested: ${model})`)
+
   const response = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`,
+    `https://generativelanguage.googleapis.com/v1beta/models/${normalizedModel}:generateContent?key=${apiKey}`,
     {
       method: 'POST',
       headers: {
