@@ -80,6 +80,29 @@ export default function Incubator() {
       : ((entry - price) / entry) * 100
   }
 
+  // Build prompt content display from egg data
+  const getEggPromptContent = (egg) => {
+    // If promptContent exists, use it
+    if (egg.promptContent && egg.promptContent.trim() !== '') {
+      return egg.promptContent
+    }
+
+    // Build fallback content from egg configuration
+    const config = egg.config || {}
+    const name = egg.promptName || 'Estrategia'
+
+    return `Estrategia: ${name}
+
+Configuración:
+• Modo: ${config.mode || 'auto'}
+• Ejecución: ${config.executionTime || 'target'}
+• Capital: $${(config.capital || 1000).toLocaleString()}
+• Apalancamiento: ${config.leverage || 5}x
+• Objetivo: ${config.targetPct ? `+${config.targetPct}%` : 'N/A'}
+• IPE Mínimo: ${config.minIpe || 80}%
+• Modelo AI: ${config.aiModel || config.aiProvider || 'gemini'}`
+  }
+
   // Calculate egg PnL for sorting (same as header display)
   const getEggPnlForSort = (egg) => {
     try {
@@ -896,7 +919,7 @@ export default function Incubator() {
                                 </div>
                                 <div className="bg-quant-card rounded-xl p-3 border border-quant-border">
                                   <p className="text-sm text-gray-300 whitespace-pre-wrap">
-                                    {egg.promptContent || 'No se guardó el contenido del prompt.'}
+                                    {getEggPromptContent(egg)}
                                   </p>
                                 </div>
                               </div>
