@@ -315,25 +315,25 @@ export default function Incubator() {
       <div className="px-4 py-3 flex gap-2">
         <button
           onClick={() => setActiveFilter('live')}
-          className={`flex-1 py-2.5 rounded-xl text-sm font-medium transition-all flex items-center justify-center gap-2 ${
+          className={`flex-1 py-2.5 rounded-xl text-sm font-medium transition-all flex items-center justify-center gap-1.5 ${
             activeFilter === 'live'
               ? 'bg-accent-cyan/20 text-accent-cyan border border-accent-cyan/30'
               : 'bg-quant-surface text-gray-400 border border-transparent'
           }`}
         >
-          <Radio size={16} />
-          Live
+          <Radio size={14} />
+          <span>Live</span>
         </button>
         <button
           onClick={() => setActiveFilter('completed')}
-          className={`flex-1 py-2.5 rounded-xl text-sm font-medium transition-all flex items-center justify-center gap-2 ${
+          className={`flex-1 py-2.5 rounded-xl text-sm font-medium transition-all flex items-center justify-center gap-1.5 ${
             activeFilter === 'completed'
-              ? 'bg-accent-cyan/20 text-accent-cyan border border-accent-cyan/30'
+              ? 'bg-accent-green/20 text-accent-green border border-accent-green/30'
               : 'bg-quant-surface text-gray-400 border border-transparent'
           }`}
         >
-          <Archive size={16} />
-          Completed
+          <Archive size={14} />
+          <span>Historial</span>
         </button>
         {/* Console Toggle */}
         <button
