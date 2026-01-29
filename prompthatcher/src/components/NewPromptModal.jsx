@@ -272,44 +272,49 @@ export default function NewPromptModal() {
 
           {/* LIBRARY MODE - Prompt selector */}
           {mode === 'library' && (
-            <div className="space-y-2" key={`library-list-${savedPrompts.length}`}>
+            <div className="space-y-2">
               {savedPrompts.length === 0 ? (
                 <div className="text-center py-6 text-gray-500">
                   <BookOpen size={24} className="mx-auto mb-2 opacity-50" />
                   <p className="text-xs">No saved prompts. Create one in Manual mode first.</p>
                 </div>
               ) : (
-                <>
-                  {/* Debug info - shows total prompts available */}
-                  <div className="text-[10px] text-gray-600 px-1 mb-1">
+                <div className="flex flex-col gap-2">
+                  {/* Debug info */}
+                  <div className="text-[10px] text-gray-600 px-1">
                     {savedPrompts.length} prompts available
                   </div>
-                  {savedPrompts.map((prompt, index) => (
-                    <button
-                      key={`prompt-${prompt.id}-${index}`}
-                      onClick={() => handleSelectPrompt(prompt)}
-                      className={`w-full p-3 rounded-xl border text-left transition-all ${
-                        selectedPromptId === prompt.id
-                          ? 'border-accent-cyan bg-accent-cyan/10'
-                          : 'border-quant-border bg-quant-surface'
-                      }`}
-                    >
-                      <div className="flex items-center justify-between mb-1">
-                        <span className={`font-medium text-sm ${
-                          selectedPromptId === prompt.id ? 'text-white' : 'text-gray-300'
-                        }`}>
-                          {prompt.name}
-                        </span>
-                        {selectedPromptId === prompt.id && (
-                          <div className="w-2 h-2 rounded-full bg-accent-cyan" />
+                  {/* Render each prompt explicitly */}
+                  {savedPrompts.filter(p => p && p.id).map((prompt, index) => {
+                    const isSelected = selectedPromptId === prompt.id
+                    return (
+                      <button
+                        key={prompt.id}
+                        onClick={() => handleSelectPrompt(prompt)}
+                        style={{ display: 'block', width: '100%' }}
+                        className={`p-3 rounded-xl border text-left transition-all ${
+                          isSelected
+                            ? 'border-accent-cyan bg-accent-cyan/10'
+                            : 'border-quant-border bg-quant-surface'
+                        }`}
+                      >
+                        <div className="flex items-center justify-between mb-1">
+                          <span className={`font-medium text-sm ${
+                            isSelected ? 'text-white' : 'text-gray-300'
+                          }`}>
+                            {prompt.name || `Prompt ${index + 1}`}
+                          </span>
+                          {isSelected && (
+                            <div className="w-2 h-2 rounded-full bg-accent-cyan" />
+                          )}
+                        </div>
+                        {prompt.content && (
+                          <p className="text-xs text-gray-500 line-clamp-2">{prompt.content}</p>
                         )}
-                      </div>
-                      {prompt.content && (
-                        <p className="text-xs text-gray-500 line-clamp-2">{prompt.content}</p>
-                      )}
-                    </button>
-                  ))}
-                </>
+                      </button>
+                    )
+                  })}
+                </div>
               )}
             </div>
           )}
