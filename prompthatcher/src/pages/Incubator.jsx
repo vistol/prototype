@@ -1,6 +1,6 @@
 import { useState, useMemo } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Archive, Clock, TrendingUp, TrendingDown, ChevronDown, ChevronUp, Activity, DollarSign, Zap, Cpu, Target, Hash, Radio, Filter, ArrowUpDown } from 'lucide-react'
+import { Archive, Clock, TrendingUp, TrendingDown, ChevronDown, ChevronUp, Activity, DollarSign, Zap, Cpu, Target, Hash, Radio, Filter, ArrowUpDown, Brain, MessageSquare } from 'lucide-react'
 import useStore from '../store/useStore'
 import Header from '../components/Header'
 import EggIcon from '../components/EggIcon'
@@ -26,7 +26,16 @@ export default function Incubator() {
   const [activeFilter, setActiveFilter] = useState('live')
   const [expandedEgg, setExpandedEgg] = useState(null)
   const [expandedConfig, setExpandedConfig] = useState({}) // Track expanded config per egg
+  const [activeTab, setActiveTab] = useState({}) // Track active tab per egg: 'config', 'trades', 'ai'
   const [showConsole, setShowConsole] = useState(false)
+
+  // Get active tab for an egg (default to 'trades')
+  const getActiveTab = (eggId) => activeTab[eggId] || 'trades'
+
+  // Set active tab for an egg
+  const setEggTab = (eggId, tab) => {
+    setActiveTab(prev => ({ ...prev, [eggId]: tab }))
+  }
   const [sortBy, setSortBy] = useState('pnl') // 'pnl', 'recent', 'winRate', 'trades'
   const [filterBy, setFilterBy] = useState('all') // 'all', 'profitable', 'unprofitable', 'hatched', 'expired'
 
@@ -546,9 +555,32 @@ export default function Incubator() {
                         exit={{ height: 0, opacity: 0 }}
                         className="border-t border-quant-border overflow-hidden"
                       >
-                        <div className="p-3 space-y-4 bg-quant-surface/20">
-                          {/* Configuration Section - Collapsible Accordion */}
-                          {(() => {
+                        <div className="bg-quant-surface/20">
+                          {/* Tab Navigation */}
+                          <div className="flex border-b border-quant-border">
+                            {[
+                              { id: 'trades', label: 'Trades', icon: TrendingUp },
+                              { id: 'config', label: 'Config', icon: DollarSign },
+                              { id: 'ai', label: 'AI Reasoning', icon: Brain }
+                            ].map(tab => (
+                              <button
+                                key={tab.id}
+                                onClick={() => setEggTab(egg.id, tab.id)}
+                                className={`flex-1 py-2.5 text-xs font-medium flex items-center justify-center gap-1.5 transition-colors ${
+                                  getActiveTab(egg.id) === tab.id
+                                    ? 'text-accent-cyan border-b-2 border-accent-cyan bg-accent-cyan/5'
+                                    : 'text-gray-500 hover:text-gray-300'
+                                }`}
+                              >
+                                <tab.icon size={14} />
+                                {tab.label}
+                              </button>
+                            ))}
+                          </div>
+
+                          <div className="p-3 space-y-4">
+                          {/* Configuration Section - Show when config tab active */}
+                          {getActiveTab(egg.id) === 'config' && (() => {
                             // Create fallback config for old eggs without config
                             const baseConfig = egg.config || {
                               capital: egg.totalCapital || 1000,
@@ -639,7 +671,8 @@ export default function Incubator() {
                             </div>
                           )})()}
 
-                          {/* Trades Section */}
+                          {/* Trades Section - Show when trades tab active */}
+                          {getActiveTab(egg.id) === 'trades' && (
                           <div>
                             <span className="text-[10px] text-gray-500 uppercase tracking-wider block mb-2">Trades ({eggSignals.length})</span>
                             <div className="space-y-2">
@@ -798,6 +831,105 @@ export default function Incubator() {
                             )
                           })}
                             </div>
+                          </div>
+                          )}
+
+                          {/* AI Reasoning Section - Show when ai tab active */}
+                          {getActiveTab(egg.id) === 'ai' && (
+                            <div className="space-y-4">
+                              {/* Prompt Sent */}
+                              <div>
+                                <div className="flex items-center gap-2 mb-2">
+                                  <MessageSquare size={14} className="text-accent-purple" />
+                                  <span className="text-[10px] text-gray-500 uppercase tracking-wider">Prompt Enviado</span>
+                                </div>
+                                <div className="bg-quant-card rounded-xl p-3 border border-quant-border">
+                                  <p className="text-sm text-gray-300 font-mono whitespace-pre-wrap">
+                                    {egg.promptContent || `Analiza oportunidades de trading para ${eggSignals.map(s => s.asset).join(', ')} con las siguientes condiciones:
+
+• Estrategia: ${egg.config?.executionTime || 'target'} based
+• Capital: $${egg.config?.capital || 1000}
+• Leverage: ${egg.config?.leverage || 5}x
+• Min IPE requerido: ${egg.config?.minIpe || 80}%
+• Buscar setups con R:R > 2:1
+
+Proporciona entry, take profit, stop loss y razonamiento para cada trade.`}
+                                  </p>
+                                </div>
+                              </div>
+
+                              {/* AI Response */}
+                              <div>
+                                <div className="flex items-center gap-2 mb-2">
+                                  <Brain size={14} className="text-accent-cyan" />
+                                  <span className="text-[10px] text-gray-500 uppercase tracking-wider">
+                                    Respuesta {AI_MODEL_LABELS[egg.config?.aiModel]?.icon} {AI_MODEL_LABELS[egg.config?.aiModel]?.name || 'AI'}
+                                  </span>
+                                </div>
+                                <div className="bg-quant-card rounded-xl border border-quant-border overflow-hidden">
+                                  {eggSignals.map((signal, idx) => (
+                                    <div key={signal.id} className={`p-3 ${idx > 0 ? 'border-t border-quant-border' : ''}`}>
+                                      <div className="flex items-center gap-2 mb-2">
+                                        <span className={`text-xs font-bold px-2 py-0.5 rounded ${
+                                          signal.strategy === 'LONG'
+                                            ? 'bg-accent-green/20 text-accent-green'
+                                            : 'bg-accent-red/20 text-accent-red'
+                                        }`}>
+                                          {signal.strategy}
+                                        </span>
+                                        <span className="font-medium text-white">{signal.asset}</span>
+                                        <span className="ml-auto text-xs text-gray-500">IPE: {signal.ipe}%</span>
+                                      </div>
+
+                                      <div className="text-sm text-gray-300 mb-3">
+                                        <p className="mb-2">{signal.explanation || 'Análisis técnico favorable para esta posición.'}</p>
+                                      </div>
+
+                                      {/* Insights */}
+                                      {signal.insights && signal.insights.length > 0 && (
+                                        <div className="space-y-1">
+                                          <span className="text-[10px] text-gray-500 uppercase">Factores Analizados:</span>
+                                          <ul className="space-y-1">
+                                            {signal.insights.map((insight, i) => (
+                                              <li key={i} className="flex items-start gap-2 text-xs text-gray-400">
+                                                <span className="text-accent-cyan mt-0.5">•</span>
+                                                <span>{insight}</span>
+                                              </li>
+                                            ))}
+                                          </ul>
+                                        </div>
+                                      )}
+
+                                      {/* Trade Parameters from AI */}
+                                      <div className="mt-3 pt-3 border-t border-quant-border/50 grid grid-cols-3 gap-2 text-xs">
+                                        <div>
+                                          <span className="text-gray-500 block">Entry</span>
+                                          <span className="text-white font-mono">${signal.entry}</span>
+                                        </div>
+                                        <div>
+                                          <span className="text-gray-500 block">Take Profit</span>
+                                          <span className="text-accent-green font-mono">${signal.takeProfit}</span>
+                                        </div>
+                                        <div>
+                                          <span className="text-gray-500 block">Stop Loss</span>
+                                          <span className="text-accent-red font-mono">${signal.stopLoss}</span>
+                                        </div>
+                                      </div>
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+
+                              {/* Metadata */}
+                              <div className="flex items-center justify-center gap-4 text-[10px] text-gray-500 pt-2">
+                                <span>Generado: {new Date(egg.createdAt).toLocaleString()}</span>
+                                <span>•</span>
+                                <span>Modelo: {AI_MODEL_LABELS[egg.config?.aiModel]?.name || 'AI'}</span>
+                                <span>•</span>
+                                <span>{eggSignals.length} trades</span>
+                              </div>
+                            </div>
+                          )}
                           </div>
                         </div>
                       </motion.div>
