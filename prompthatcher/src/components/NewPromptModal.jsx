@@ -1,6 +1,6 @@
 import { useState, useMemo } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { X, Sparkles, PenTool, Clock, DollarSign, TrendingUp, Cpu, Target, Hash, Crown, ArrowRight, BookOpen, AlertTriangle, Zap, AlertCircle, Check } from 'lucide-react'
+import { X, PenTool, Clock, DollarSign, TrendingUp, Cpu, Target, Hash, ArrowRight, BookOpen, AlertTriangle, Zap, AlertCircle, Check } from 'lucide-react'
 import useStore from '../store/useStore'
 import TradeSelectionModal from './TradeSelectionModal'
 
@@ -73,7 +73,7 @@ const calculateEstimate = (targetPct, leverage) => {
 
 export default function NewPromptModal() {
   const { setNewPromptModalOpen, addPrompt, generateTrades, prompts, settings } = useStore()
-  const [mode, setMode] = useState('auto') // 'auto', 'library', 'manual'
+  const [mode, setMode] = useState('library') // 'library' or 'manual'
   const [name, setName] = useState('')
   const [content, setContent] = useState('')
   const [executionTime, setExecutionTime] = useState('target')
@@ -126,6 +126,7 @@ export default function NewPromptModal() {
   const handleSelectPrompt = (prompt) => {
     setSelectedPromptId(prompt.id)
     setName(prompt.name)
+    setContent(prompt.content || '')
     setExecutionTime(prompt.executionTime || 'target')
     setCapital(prompt.capital || 1000)
     setLeverage(prompt.leverage || 5)
@@ -135,6 +136,7 @@ export default function NewPromptModal() {
     setAiProvider(mappedProvider)
     setMinIpe(prompt.minIpe || 80)
     setNumResults(prompt.numResults || 3)
+    setTargetPct(prompt.targetPct || 10)
   }
 
   const handleSubmit = async () => {
@@ -153,41 +155,30 @@ export default function NewPromptModal() {
         executionTime,
         capital,
         leverage,
-        aiModel: aiProvider, // Use provider ID
+        aiModel: aiProvider,
         minIpe,
         numResults,
         targetPct: executionTime === 'target' ? targetPct : null
       }
     } else {
+      // Manual mode
       if (!name.trim()) return
 
-      // For AUTO mode, include the system prompt as the strategy content
-      // For MANUAL mode, use the user's custom content
-      let promptContent = ''
-      if (mode === 'auto') {
-        // Get the system prompt to include as the strategy base
-        const systemPrompt = settings?.systemPrompt || ''
-        promptContent = systemPrompt
-          ? `${systemPrompt}\n\n--- Configuración ---\nModo: AUTO\nEjecución: ${executionTime.toUpperCase()}\nCapital: $${capital}\nApalancamiento: ${leverage}x\nObjetivo: +${targetPct}%\nIPE Mínimo: ${minIpe}%`
-          : `Estrategia AUTO generada por IA\n\nConfiguración:\n- Ejecución: ${executionTime.toUpperCase()}\n- Capital: $${capital}\n- Apalancamiento: ${leverage}x\n- Objetivo: +${targetPct}%\n- IPE Mínimo: ${minIpe}%`
-      } else {
-        promptContent = content || name.trim()
-      }
+      const promptContent = content || name.trim()
 
       promptToUse = {
         id: `prompt-${Date.now()}`,
         name: name.trim(),
         content: promptContent,
-        mode,
+        mode: 'manual',
         executionTime,
         capital,
         leverage,
-        aiModel: aiProvider, // Use provider ID
+        aiModel: aiProvider,
         minIpe,
         numResults,
         targetPct: executionTime === 'target' ? targetPct : null,
         status: 'active',
-        parentPrompt: mode === 'auto' ? 'system' : null,
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString()
       }
@@ -240,7 +231,7 @@ export default function NewPromptModal() {
         className="w-full max-w-lg bg-quant-card rounded-t-3xl max-h-[85vh] flex flex-col"
         onClick={(e) => e.stopPropagation()}
       >
-        {/* Header - Compact */}
+        {/* Header */}
         <div className="shrink-0 px-4 py-3 flex items-center justify-between border-b border-quant-border">
           <h2 className="text-base font-bold text-white">New Incubation</h2>
           <button
@@ -251,11 +242,10 @@ export default function NewPromptModal() {
           </button>
         </div>
 
-        {/* Tab Navigation - Compact */}
+        {/* Tab Navigation - Library & Manual only */}
         <div className="shrink-0 px-4 py-2">
           <div className="flex bg-quant-surface rounded-lg p-0.5">
             {[
-              { id: 'auto', icon: Sparkles, label: 'Auto' },
               { id: 'library', icon: BookOpen, label: 'Library' },
               { id: 'manual', icon: PenTool, label: 'Manual' }
             ].map(tab => (
@@ -276,23 +266,13 @@ export default function NewPromptModal() {
         {/* Content */}
         <div className="flex-1 overflow-y-auto hide-scrollbar px-4 py-3 space-y-4">
 
-          {/* AUTO MODE - Compact info */}
-          {mode === 'auto' && (
-            <div className="p-3 bg-accent-cyan/10 border border-accent-cyan/20 rounded-xl flex items-center gap-2">
-              <Crown size={16} className="text-accent-cyan shrink-0" />
-              <p className="text-xs text-accent-cyan">
-                AI generates unique strategies using scientific method
-              </p>
-            </div>
-          )}
-
           {/* LIBRARY MODE - Prompt selector */}
           {mode === 'library' && (
             <div className="space-y-2">
               {savedPrompts.length === 0 ? (
                 <div className="text-center py-6 text-gray-500">
                   <BookOpen size={24} className="mx-auto mb-2 opacity-50" />
-                  <p className="text-xs">No saved prompts. Use Auto or Manual first.</p>
+                  <p className="text-xs">No saved prompts. Create one in Manual mode first.</p>
                 </div>
               ) : (
                 savedPrompts.map((prompt) => (
@@ -305,7 +285,7 @@ export default function NewPromptModal() {
                         : 'border-quant-border bg-quant-surface'
                     }`}
                   >
-                    <div className="flex items-center justify-between">
+                    <div className="flex items-center justify-between mb-1">
                       <span className={`font-medium text-sm ${
                         selectedPromptId === prompt.id ? 'text-white' : 'text-gray-300'
                       }`}>
@@ -315,6 +295,9 @@ export default function NewPromptModal() {
                         <div className="w-2 h-2 rounded-full bg-accent-cyan" />
                       )}
                     </div>
+                    {prompt.content && (
+                      <p className="text-xs text-gray-500 line-clamp-2">{prompt.content}</p>
+                    )}
                   </button>
                 ))
               )}
@@ -324,8 +307,8 @@ export default function NewPromptModal() {
           {/* Common form fields - only show if not library OR library with selection */}
           {(mode !== 'library' || selectedPromptId) && (
             <>
-              {/* Name field - only for auto/manual */}
-              {mode !== 'library' && (
+              {/* Name field - only for manual mode */}
+              {mode === 'manual' && (
                 <div>
                   <label className="text-[10px] text-gray-500 uppercase tracking-wider mb-1 block">Name</label>
                   <input
@@ -338,15 +321,15 @@ export default function NewPromptModal() {
                 </div>
               )}
 
-              {/* Manual content */}
+              {/* Manual content - Strategy description */}
               {mode === 'manual' && (
                 <div>
                   <label className="text-[10px] text-gray-500 uppercase tracking-wider mb-1 block">Strategy</label>
                   <textarea
                     value={content}
                     onChange={(e) => setContent(e.target.value)}
-                    placeholder="Describe your trading strategy..."
-                    rows={3}
+                    placeholder="Describe your trading strategy in detail. The AI will use this to generate trade signals..."
+                    rows={4}
                     className="w-full bg-quant-surface border border-quant-border rounded-lg px-3 py-2 text-sm text-white placeholder-gray-500 resize-none"
                   />
                 </div>
@@ -554,25 +537,23 @@ export default function NewPromptModal() {
                 </div>
               </div>
 
-              {/* Min IPE - Compact slider */}
-              {mode === 'auto' && (
-                <div>
-                  <div className="flex items-center justify-between mb-1">
-                    <label className="text-[10px] text-gray-500 uppercase tracking-wider flex items-center gap-1">
-                      <Target size={10} /> Min IPE
-                    </label>
-                    <span className="text-accent-cyan font-mono text-xs">{minIpe}%</span>
-                  </div>
-                  <input
-                    type="range"
-                    min={50}
-                    max={95}
-                    value={minIpe}
-                    onChange={(e) => setMinIpe(Number(e.target.value))}
-                    className="w-full h-1"
-                  />
+              {/* Min IPE Slider */}
+              <div>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="text-[10px] text-gray-500 uppercase tracking-wider flex items-center gap-1">
+                    <Target size={10} /> Min IPE
+                  </label>
+                  <span className="text-accent-cyan font-mono text-xs">{minIpe}%</span>
                 </div>
-              )}
+                <input
+                  type="range"
+                  min={50}
+                  max={95}
+                  value={minIpe}
+                  onChange={(e) => setMinIpe(Number(e.target.value))}
+                  className="w-full h-1"
+                />
+              </div>
             </>
           )}
         </div>
