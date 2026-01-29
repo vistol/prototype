@@ -30,21 +30,27 @@ const aiProviders = [
     name: 'Google',
     models: ['gemini-1.5-flash', 'gemini-1.5-pro', 'gemini-2.0-flash'],
     icon: '🔮',
-    color: 'from-blue-500 to-cyan-500'
+    color: 'from-blue-500 to-cyan-500',
+    apiUrl: 'https://aistudio.google.com/apikey',
+    apiLabel: 'Get free API key from Google AI Studio'
   },
   {
     id: 'openai',
     name: 'OpenAI',
     models: ['gpt-4', 'gpt-4-turbo', 'gpt-3.5-turbo'],
     icon: '🤖',
-    color: 'from-green-500 to-emerald-500'
+    color: 'from-green-500 to-emerald-500',
+    apiUrl: 'https://platform.openai.com/api-keys',
+    apiLabel: 'Get API key from OpenAI Platform'
   },
   {
     id: 'xai',
     name: 'xAI (Grok)',
-    models: ['grok-1', 'grok-2'],
+    models: ['grok-beta', 'grok-2'],
     icon: '⚡',
-    color: 'from-orange-500 to-red-500'
+    color: 'from-orange-500 to-red-500',
+    apiUrl: 'https://console.x.ai/',
+    apiLabel: 'Get API key from xAI Console'
   }
 ]
 
@@ -266,7 +272,19 @@ export default function Settings() {
                     {/* API Key Input */}
                     {settings.aiProvider === provider.id && (
                       <div className="mt-4 pt-4 border-t border-quant-border">
-                        <label className="text-xs text-gray-400 block mb-2">API Key</label>
+                        <div className="flex items-center justify-between mb-2">
+                          <label className="text-xs text-gray-400">API Key</label>
+                          <a
+                            href={provider.apiUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            onClick={(e) => e.stopPropagation()}
+                            className="text-xs text-accent-cyan hover:underline flex items-center gap-1"
+                          >
+                            {provider.apiLabel}
+                            <ChevronRight size={12} />
+                          </a>
+                        </div>
                         <div className="relative">
                           <input
                             type={showApiKey[provider.id] ? 'text' : 'password'}
