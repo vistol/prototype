@@ -865,7 +865,7 @@ export default function Incubator() {
                                   +{egg.config?.targetPct || 10}% objetivo
                                 </span>
                                 <span className="text-xs px-2 py-1 rounded-full bg-quant-surface text-gray-400">
-                                  {AI_MODEL_LABELS[egg.config?.aiModel]?.icon} {AI_MODEL_LABELS[egg.config?.aiModel]?.name || 'AI'}
+                                  {AI_MODEL_LABELS[egg.config?.aiProvider || egg.config?.aiModel]?.icon || '🤖'} {AI_MODEL_LABELS[egg.config?.aiProvider || egg.config?.aiModel]?.name || 'AI'}
                                 </span>
                               </div>
 

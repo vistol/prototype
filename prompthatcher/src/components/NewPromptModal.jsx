@@ -146,8 +146,10 @@ export default function NewPromptModal() {
       const selectedPrompt = prompts.find(p => p.id === selectedPromptId)
       if (!selectedPrompt) return
 
+      // Ensure content is preserved from the library prompt
       promptToUse = {
         ...selectedPrompt,
+        content: selectedPrompt.content || selectedPrompt.name, // Fallback to name if no content
         executionTime,
         capital,
         leverage,
@@ -159,9 +161,18 @@ export default function NewPromptModal() {
     } else {
       if (!name.trim()) return
 
-      const promptContent = mode === 'auto'
-        ? `[AUTO] ${executionTime.toUpperCase()} | $${capital} @ ${leverage}x | Target: ${targetPct}%`
-        : content
+      // For AUTO mode, include the system prompt as the strategy content
+      // For MANUAL mode, use the user's custom content
+      let promptContent = ''
+      if (mode === 'auto') {
+        // Get the system prompt to include as the strategy base
+        const systemPrompt = settings?.systemPrompt || ''
+        promptContent = systemPrompt
+          ? `${systemPrompt}\n\n--- Configuración ---\nModo: AUTO\nEjecución: ${executionTime.toUpperCase()}\nCapital: $${capital}\nApalancamiento: ${leverage}x\nObjetivo: +${targetPct}%\nIPE Mínimo: ${minIpe}%`
+          : `Estrategia AUTO generada por IA\n\nConfiguración:\n- Ejecución: ${executionTime.toUpperCase()}\n- Capital: $${capital}\n- Apalancamiento: ${leverage}x\n- Objetivo: +${targetPct}%\n- IPE Mínimo: ${minIpe}%`
+      } else {
+        promptContent = content || name.trim()
+      }
 
       promptToUse = {
         id: `prompt-${Date.now()}`,

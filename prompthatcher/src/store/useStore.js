@@ -277,12 +277,20 @@ const useStore = create(
           selected: undefined // Remove selection flag
         }))
 
+        // Build comprehensive prompt content for display
+        // Include prompt content, or build from configuration if not available
+        let promptContentDisplay = prompt.content
+        if (!promptContentDisplay || promptContentDisplay.trim() === '') {
+          // Fallback: build content from configuration
+          promptContentDisplay = `Estrategia: ${prompt.name}\n\nConfiguración:\n- Modo: ${prompt.mode || 'auto'}\n- Ejecución: ${prompt.executionTime || 'target'}\n- Capital: $${prompt.capital || 1000}\n- Apalancamiento: ${prompt.leverage || 5}x\n- Objetivo: +${prompt.targetPct || 10}%\n- IPE Mínimo: ${prompt.minIpe || 80}%`
+        }
+
         // Create the egg with all prompt configuration
         const egg = {
           id: `egg-${Date.now()}`,
           promptId: prompt.id,
           promptName: prompt.name,
-          promptContent: prompt.content || '',
+          promptContent: promptContentDisplay,
           status: 'incubating',
           trades: newSignals.map(s => s.id),
           totalCapital: selectedTrades.reduce((sum, t) => sum + (t.capital || 0), 0),
@@ -292,6 +300,7 @@ const useStore = create(
             leverage: prompt.leverage || 5,
             executionTime: prompt.executionTime || 'target',
             aiModel: prompt.aiModel || 'gemini',
+            aiProvider: prompt.aiModel || 'google', // Also store as provider for display
             minIpe: prompt.minIpe || 80,
             numResults: prompt.numResults || 3,
             mode: prompt.mode || 'auto',
