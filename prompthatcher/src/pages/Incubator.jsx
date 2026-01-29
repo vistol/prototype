@@ -82,91 +82,117 @@ export default function Incubator() {
 
   // Calculate egg PnL for sorting (same as header display)
   const getEggPnlForSort = (egg) => {
-    const eggSignals = signals.filter(s => egg.trades.includes(s.id))
-    if (eggSignals.length === 0) return 0
+    try {
+      if (!egg?.trades || !Array.isArray(egg.trades)) return 0
+      const eggSignals = signals.filter(s => egg.trades.includes(s.id))
+      if (eggSignals.length === 0) return 0
 
-    let totalPnl = 0
-    eggSignals.forEach(signal => {
-      totalPnl += getPnlForSort(signal)
-    })
-    return totalPnl / eggSignals.length
+      let totalPnl = 0
+      eggSignals.forEach(signal => {
+        totalPnl += getPnlForSort(signal) || 0
+      })
+      return totalPnl / eggSignals.length
+    } catch (error) {
+      console.error('Error calculating egg PnL:', error)
+      return 0
+    }
   }
 
   // Get egg results for filtering/sorting
   const getEggResults = (egg) => {
-    const eggSignals = signals.filter(s => egg.trades.includes(s.id))
-    const closedSignals = eggSignals.filter(s => s.status === 'closed')
-    const expired = isEggExpired(egg)
-    const signalsForPnl = expired ? eggSignals : closedSignals
+    try {
+      // Defensive check for egg.trades
+      if (!egg?.trades || !Array.isArray(egg.trades)) {
+        return { totalPnl: 0, winRate: 0, totalTrades: 0 }
+      }
 
-    if (signalsForPnl.length === 0) {
-      return { totalPnl: 0, winRate: 0, totalTrades: eggSignals.length }
-    }
+      const eggSignals = signals.filter(s => egg.trades.includes(s.id))
+      const closedSignals = eggSignals.filter(s => s.status === 'closed')
+      const expired = isEggExpired(egg)
+      const signalsForPnl = expired ? eggSignals : closedSignals
 
-    const pnlValues = signalsForPnl.map(s => {
-      if (s.status === 'closed' && s.pnl !== undefined) return s.pnl
-      const currentPrice = prices[s.asset]?.price
-      if (!currentPrice) return 0
-      const entry = parseFloat(s.entry)
-      return s.strategy === 'LONG'
-        ? ((currentPrice - entry) / entry) * 100
-        : ((entry - currentPrice) / entry) * 100
-    })
+      if (signalsForPnl.length === 0) {
+        return { totalPnl: 0, winRate: 0, totalTrades: eggSignals.length }
+      }
 
-    const wins = pnlValues.filter(p => p > 0).length
-    return {
-      totalPnl: pnlValues.reduce((sum, p) => sum + p, 0) / pnlValues.length,
-      winRate: Math.round((wins / signalsForPnl.length) * 100),
-      totalTrades: eggSignals.length
+      const pnlValues = signalsForPnl.map(s => {
+        if (s.status === 'closed' && s.pnl !== undefined) return s.pnl
+        const currentPrice = prices[s.asset]?.price
+        if (!currentPrice) return 0
+        const entry = parseFloat(s.entry) || 0
+        if (entry === 0) return 0
+        return s.strategy === 'LONG'
+          ? ((currentPrice - entry) / entry) * 100
+          : ((entry - currentPrice) / entry) * 100
+      })
+
+      const wins = pnlValues.filter(p => p > 0).length
+      return {
+        totalPnl: pnlValues.length > 0 ? pnlValues.reduce((sum, p) => sum + p, 0) / pnlValues.length : 0,
+        winRate: signalsForPnl.length > 0 ? Math.round((wins / signalsForPnl.length) * 100) : 0,
+        totalTrades: eggSignals.length
+      }
+    } catch (error) {
+      console.error('Error calculating egg results:', error)
+      return { totalPnl: 0, winRate: 0, totalTrades: 0 }
     }
   }
 
   // Filter eggs: Live (active & not expired) vs Completed (hatched or expired)
   const filteredEggs = useMemo(() => {
-    return eggs
-      .filter(e => {
-        const expired = isEggExpired(e)
-        if (activeFilter === 'live') {
-          return e.status === 'incubating' && !expired
-        } else {
-          // Completed tab shows: naturally hatched OR expired eggs
-          const isCompleted = e.status === 'hatched' || (e.status === 'incubating' && expired)
-          if (!isCompleted) return false
+    try {
+      // Ensure eggs is an array
+      if (!Array.isArray(eggs)) return []
 
-          // Apply sub-filter for completed tab
-          const results = getEggResults(e)
-          switch (filterBy) {
-            case 'profitable':
-              return results.totalPnl >= 0
-            case 'unprofitable':
-              return results.totalPnl < 0
-            case 'hatched':
-              return e.status === 'hatched'
-            case 'expired':
-              return e.status === 'incubating' && expired
-            default:
-              return true
+      return eggs
+        .filter(e => {
+          if (!e) return false
+          const expired = isEggExpired(e)
+          if (activeFilter === 'live') {
+            return e.status === 'incubating' && !expired
+          } else {
+            // Completed tab shows: naturally hatched OR expired eggs
+            const isCompleted = e.status === 'hatched' || (e.status === 'incubating' && expired)
+            if (!isCompleted) return false
+
+            // Apply sub-filter for completed tab
+            const results = getEggResults(e)
+            switch (filterBy) {
+              case 'profitable':
+                return results.totalPnl >= 0
+              case 'unprofitable':
+                return results.totalPnl < 0
+              case 'hatched':
+                return e.status === 'hatched'
+              case 'expired':
+                return e.status === 'incubating' && expired
+              default:
+                return true
+            }
           }
-        }
-      })
-      .map(e => ({
-        ...e,
-        _results: getEggResults(e),
-        _pnl: getEggPnlForSort(e) // Real-time PnL for sorting
-      }))
-      .sort((a, b) => {
-        switch (sortBy) {
-          case 'pnl':
-            return b._pnl - a._pnl // Use real-time PnL
-          case 'winRate':
-            return b._results.winRate - a._results.winRate
-          case 'trades':
-            return b._results.totalTrades - a._results.totalTrades
-          case 'recent':
-          default:
-            return new Date(b.createdAt) - new Date(a.createdAt)
-        }
-      })
+        })
+        .map(e => ({
+          ...e,
+          _results: getEggResults(e),
+          _pnl: getEggPnlForSort(e) || 0 // Real-time PnL for sorting
+        }))
+        .sort((a, b) => {
+          switch (sortBy) {
+            case 'pnl':
+              return (b._pnl || 0) - (a._pnl || 0)
+            case 'winRate':
+              return (b._results?.winRate || 0) - (a._results?.winRate || 0)
+            case 'trades':
+              return (b._results?.totalTrades || 0) - (a._results?.totalTrades || 0)
+            case 'recent':
+            default:
+              return new Date(b.createdAt || 0) - new Date(a.createdAt || 0)
+          }
+        })
+    } catch (error) {
+      console.error('Error filtering eggs:', error)
+      return []
+    }
   }, [eggs, signals, prices, activeFilter, filterBy, sortBy])
 
   // Get egg status info
