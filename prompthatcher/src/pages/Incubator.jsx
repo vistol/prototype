@@ -522,11 +522,11 @@ export default function Incubator() {
                         {/* Title row */}
                         <div className="flex items-center justify-between gap-2">
                           <h3 className="font-semibold text-white truncate text-base">{egg.promptName}</h3>
-                          {pnl !== null && (
+                          {pnl !== null && pnl !== undefined && !isNaN(pnl) && (
                             <span className={`text-lg font-mono font-bold flex-shrink-0 ${
                               pnl >= 0 ? 'text-accent-green' : 'text-accent-red'
                             }`}>
-                              {pnl >= 0 ? '+' : ''}{pnl.toFixed(2)}%
+                              {pnl >= 0 ? '+' : ''}{(pnl || 0).toFixed(2)}%
                             </span>
                           )}
                         </div>
@@ -583,10 +583,10 @@ export default function Incubator() {
                     {isCompleted && results && (
                       <div className="grid grid-cols-4 gap-2 mt-4 pt-3 border-t border-quant-border">
                         {[
-                          { label: 'Closed', value: `${results.closedTrades}/${results.totalTrades}`, color: 'text-white' },
-                          { label: 'Win Rate', value: `${results.winRate}%`, color: results.winRate >= 50 ? 'text-accent-green' : 'text-accent-red' },
-                          { label: 'PF', value: results.profitFactor === Infinity ? '∞' : results.profitFactor.toFixed(1), color: results.profitFactor >= 1 ? 'text-accent-green' : 'text-accent-red' },
-                          { label: 'PnL', value: `${results.totalPnl >= 0 ? '+' : ''}${results.totalPnl.toFixed(1)}%`, color: results.totalPnl >= 0 ? 'text-accent-green' : 'text-accent-red' }
+                          { label: 'Closed', value: `${results.closedTrades || 0}/${results.totalTrades || 0}`, color: 'text-white' },
+                          { label: 'Win Rate', value: `${results.winRate || 0}%`, color: (results.winRate || 0) >= 50 ? 'text-accent-green' : 'text-accent-red' },
+                          { label: 'PF', value: results.profitFactor === Infinity ? '∞' : (results.profitFactor || 0).toFixed(1), color: (results.profitFactor || 0) >= 1 ? 'text-accent-green' : 'text-accent-red' },
+                          { label: 'PnL', value: `${(results.totalPnl || 0) >= 0 ? '+' : ''}${(results.totalPnl || 0).toFixed(1)}%`, color: (results.totalPnl || 0) >= 0 ? 'text-accent-green' : 'text-accent-red' }
                         ].map(stat => (
                           <div key={stat.label} className="text-center">
                             <span className="text-[10px] text-gray-500 uppercase block">{stat.label}</span>
@@ -700,8 +700,8 @@ export default function Incubator() {
                                       {/* Explanation */}
                                       {config.targetPct > 0 && (
                                         <div className="text-center text-sm text-gray-400 mb-3">
-                                          Con <span className="text-white font-medium">{config.leverage}x</span> leverage,
-                                          solo necesitas <span className="text-accent-cyan font-medium">{priceMove.toFixed(1)}%</span> de movimiento
+                                          Con <span className="text-white font-medium">{config.leverage || 1}x</span> leverage,
+                                          solo necesitas <span className="text-accent-cyan font-medium">{(priceMove || 0).toFixed(1)}%</span> de movimiento
                                         </div>
                                       )}
 
@@ -764,13 +764,13 @@ export default function Incubator() {
                                     <span className={`font-mono font-bold ${
                                       signal.result === 'win' ? 'text-accent-green' : 'text-accent-red'
                                     }`}>
-                                      {signal.pnl >= 0 ? '+' : ''}{signal.pnl?.toFixed(2) || '0.00'}%
+                                      {(signal.pnl || 0) >= 0 ? '+' : ''}{(signal.pnl || 0).toFixed(2)}%
                                     </span>
-                                  ) : unrealizedPnl !== null ? (
+                                  ) : unrealizedPnl !== null && unrealizedPnl !== undefined && !isNaN(unrealizedPnl) ? (
                                     <span className={`font-mono font-bold ${
                                       unrealizedPnl >= 0 ? 'text-accent-green' : 'text-accent-red'
                                     }`}>
-                                      {unrealizedPnl >= 0 ? '+' : ''}{unrealizedPnl.toFixed(2)}%
+                                      {unrealizedPnl >= 0 ? '+' : ''}{(unrealizedPnl || 0).toFixed(2)}%
                                     </span>
                                   ) : status.isExpired ? (
                                     <span className="text-xs text-accent-orange">Expired</span>
@@ -782,18 +782,18 @@ export default function Incubator() {
                                 {/* Price levels - compact */}
                                 <div className="flex items-center gap-4 mt-2 text-xs font-mono">
                                   <span className="text-gray-400">
-                                    E <span className="text-white">{parseFloat(signal.entry).toFixed(2)}</span>
+                                    E <span className="text-white">{(parseFloat(signal.entry) || 0).toFixed(2)}</span>
                                   </span>
                                   {price && !isClosed && (
                                     <span className="text-accent-cyan">
-                                      Now {price.toFixed(2)}
+                                      Now {(price || 0).toFixed(2)}
                                     </span>
                                   )}
                                   <span className="text-accent-green ml-auto">
-                                    TP {parseFloat(signal.takeProfit).toFixed(2)}
+                                    TP {(parseFloat(signal.takeProfit) || 0).toFixed(2)}
                                   </span>
                                   <span className="text-accent-red">
-                                    SL {parseFloat(signal.stopLoss).toFixed(2)}
+                                    SL {(parseFloat(signal.stopLoss) || 0).toFixed(2)}
                                   </span>
                                 </div>
 
@@ -830,16 +830,16 @@ export default function Incubator() {
                                         </div>
                                         <div className="flex items-center justify-between">
                                           <div className="text-accent-green font-bold">
-                                            <span className="text-lg">+${potentialProfit.toFixed(0)}</span>
-                                            <span className="text-xs ml-1 opacity-70">(+{profitPct.toFixed(0)}%)</span>
+                                            <span className="text-lg">+${(potentialProfit || 0).toFixed(0)}</span>
+                                            <span className="text-xs ml-1 opacity-70">(+{(profitPct || 0).toFixed(0)}%)</span>
                                           </div>
                                           <div className="text-accent-red font-bold text-right">
-                                            <span className="text-lg">-${potentialLoss.toFixed(0)}</span>
-                                            <span className="text-xs ml-1 opacity-70">(-{(slMovePct * lev).toFixed(0)}%)</span>
+                                            <span className="text-lg">-${(potentialLoss || 0).toFixed(0)}</span>
+                                            <span className="text-xs ml-1 opacity-70">(-{((slMovePct || 0) * (lev || 1)).toFixed(0)}%)</span>
                                           </div>
                                         </div>
                                         <div className="text-[9px] text-gray-500 text-center mt-1">
-                                          Capital: ${cap.toFixed(0)} × {lev}x leverage
+                                          Capital: ${(cap || 0).toFixed(0)} × {lev || 1}x leverage
                                         </div>
                                       </div>
                                     )
