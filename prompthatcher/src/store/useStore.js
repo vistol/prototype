@@ -595,7 +595,7 @@ const useStore = create(
       // Settings
       settings: {
         aiProvider: 'google',
-        aiModel: 'gemini-pro',
+        aiModel: 'gemini-1.5-flash',
         apiKeys: {
           google: '',
           openai: '',

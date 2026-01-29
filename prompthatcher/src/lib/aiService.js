@@ -198,9 +198,9 @@ const parseAIResponse = (responseText, prices, config) => {
 }
 
 // Call Google Gemini API
-const callGeminiAPI = async (prompt, apiKey) => {
+const callGeminiAPI = async (prompt, apiKey, model = 'gemini-1.5-flash') => {
   const response = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key=${apiKey}`,
+    `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`,
     {
       method: 'POST',
       headers: {
@@ -360,7 +360,7 @@ export const generateTradesFromPrompt = async (prompt, settings, numResults = 3)
   try {
     switch (settings.aiProvider) {
       case 'google':
-        aiResponse = await callGeminiAPI(aiPrompt, apiKey)
+        aiResponse = await callGeminiAPI(aiPrompt, apiKey, settings.aiModel || 'gemini-1.5-flash')
         break
       case 'openai':
         aiResponse = await callOpenAIAPI(aiPrompt, apiKey, settings.aiModel || 'gpt-4')

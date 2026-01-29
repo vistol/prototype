@@ -28,7 +28,7 @@ const aiProviders = [
   {
     id: 'google',
     name: 'Google',
-    models: ['gemini-pro', 'gemini-1.5-pro'],
+    models: ['gemini-1.5-flash', 'gemini-1.5-pro', 'gemini-2.0-flash'],
     icon: '🔮',
     color: 'from-blue-500 to-cyan-500'
   },
