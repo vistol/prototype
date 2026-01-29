@@ -837,134 +837,98 @@ export default function Incubator() {
                           {/* AI Reasoning Section - Show when ai tab active */}
                           {getActiveTab(egg.id) === 'ai' && (
                             <div className="space-y-4">
-                              {/* Simulation Notice */}
-                              <div className="bg-accent-orange/10 border border-accent-orange/30 rounded-xl p-3">
-                                <div className="flex items-start gap-2">
-                                  <Zap size={16} className="text-accent-orange mt-0.5 shrink-0" />
-                                  <div>
-                                    <p className="text-sm font-medium text-accent-orange">Modo Simulación</p>
-                                    <p className="text-xs text-gray-400 mt-1">
-                                      Este prototipo genera trades simulados basados en tu configuración.
-                                      Los precios son reales (Binance), pero las señales no usan AI real todavía.
-                                    </p>
-                                  </div>
-                                </div>
-                              </div>
-
-                              {/* User's Prompt */}
-                              {egg.promptContent && (
-                                <div>
-                                  <div className="flex items-center gap-2 mb-2">
-                                    <MessageSquare size={14} className="text-accent-purple" />
-                                    <span className="text-[10px] text-gray-500 uppercase tracking-wider">Tu Prompt</span>
-                                  </div>
-                                  <div className="bg-quant-card rounded-xl p-3 border border-quant-border">
-                                    <p className="text-sm text-gray-300 whitespace-pre-wrap">
-                                      {egg.promptContent}
-                                    </p>
-                                  </div>
-                                </div>
-                              )}
-
-                              {/* Configuration Used */}
+                              {/* User's Prompt Strategy */}
                               <div>
                                 <div className="flex items-center gap-2 mb-2">
-                                  <Cpu size={14} className="text-accent-cyan" />
-                                  <span className="text-[10px] text-gray-500 uppercase tracking-wider">Configuración Aplicada</span>
+                                  <MessageSquare size={14} className="text-accent-purple" />
+                                  <span className="text-[10px] text-gray-500 uppercase tracking-wider">Tu Estrategia de Trading</span>
                                 </div>
                                 <div className="bg-quant-card rounded-xl p-3 border border-quant-border">
-                                  <div className="grid grid-cols-2 gap-3 text-sm">
-                                    <div>
-                                      <span className="text-gray-500 text-xs block">Capital</span>
-                                      <span className="text-white font-mono">${egg.config?.capital?.toLocaleString() || 1000}</span>
-                                    </div>
-                                    <div>
-                                      <span className="text-gray-500 text-xs block">Leverage</span>
-                                      <span className="text-white font-mono">{egg.config?.leverage || 5}x</span>
-                                    </div>
-                                    <div>
-                                      <span className="text-gray-500 text-xs block">Objetivo</span>
-                                      <span className="text-accent-green font-mono">+{egg.config?.targetPct || 10}%</span>
-                                    </div>
-                                    <div>
-                                      <span className="text-gray-500 text-xs block">Min IPE</span>
-                                      <span className="text-white font-mono">{egg.config?.minIpe || 80}%</span>
-                                    </div>
-                                  </div>
+                                  <p className="text-sm text-gray-300 whitespace-pre-wrap">
+                                    {egg.promptContent || 'No se guardó el contenido del prompt.'}
+                                  </p>
                                 </div>
                               </div>
 
-                              {/* How Trades Were Generated */}
-                              <div>
-                                <div className="flex items-center gap-2 mb-2">
-                                  <Brain size={14} className="text-accent-purple" />
-                                  <span className="text-[10px] text-gray-500 uppercase tracking-wider">Lógica de Generación</span>
-                                </div>
-                                <div className="bg-quant-card rounded-xl p-3 border border-quant-border text-sm text-gray-400">
-                                  <ul className="space-y-2">
-                                    <li className="flex items-start gap-2">
-                                      <span className="text-accent-cyan">1.</span>
-                                      <span>Assets seleccionados aleatoriamente de: BTC, ETH, SOL, BNB, XRP, etc.</span>
-                                    </li>
-                                    <li className="flex items-start gap-2">
-                                      <span className="text-accent-cyan">2.</span>
-                                      <span>Precios de entrada obtenidos en tiempo real de <span className="text-white">Binance API</span></span>
-                                    </li>
-                                    <li className="flex items-start gap-2">
-                                      <span className="text-accent-cyan">3.</span>
-                                      <span>TP calculado: Entry × (1 + {((egg.config?.targetPct || 10) / (egg.config?.leverage || 5)).toFixed(1)}%) para lograr +{egg.config?.targetPct || 10}% con {egg.config?.leverage || 5}x</span>
-                                    </li>
-                                    <li className="flex items-start gap-2">
-                                      <span className="text-accent-cyan">4.</span>
-                                      <span>SL calculado con ratio R:R mínimo de 2:1</span>
-                                    </li>
-                                    <li className="flex items-start gap-2">
-                                      <span className="text-accent-cyan">5.</span>
-                                      <span>Dirección (LONG/SHORT) elegida al 50/50</span>
-                                    </li>
-                                  </ul>
-                                </div>
+                              {/* Configuration Summary */}
+                              <div className="flex flex-wrap gap-2">
+                                <span className="text-xs px-2 py-1 rounded-full bg-accent-cyan/10 text-accent-cyan">
+                                  ${egg.config?.capital?.toLocaleString() || 1000} capital
+                                </span>
+                                <span className="text-xs px-2 py-1 rounded-full bg-accent-purple/10 text-accent-purple">
+                                  {egg.config?.leverage || 5}x leverage
+                                </span>
+                                <span className="text-xs px-2 py-1 rounded-full bg-accent-green/10 text-accent-green">
+                                  +{egg.config?.targetPct || 10}% objetivo
+                                </span>
+                                <span className="text-xs px-2 py-1 rounded-full bg-quant-surface text-gray-400">
+                                  {AI_MODEL_LABELS[egg.config?.aiModel]?.icon} {AI_MODEL_LABELS[egg.config?.aiModel]?.name || 'AI'}
+                                </span>
                               </div>
 
-                              {/* Trade Details */}
+                              {/* AI Reasoning per Trade */}
                               <div>
                                 <div className="flex items-center gap-2 mb-2">
-                                  <Target size={14} className="text-accent-green" />
-                                  <span className="text-[10px] text-gray-500 uppercase tracking-wider">Trades Generados ({eggSignals.length})</span>
+                                  <Brain size={14} className="text-accent-cyan" />
+                                  <span className="text-[10px] text-gray-500 uppercase tracking-wider">
+                                    Razonamiento del AI ({eggSignals.length} trades)
+                                  </span>
                                 </div>
-                                <div className="bg-quant-card rounded-xl border border-quant-border overflow-hidden">
+                                <div className="space-y-3">
                                   {eggSignals.map((signal, idx) => (
-                                    <div key={signal.id} className={`p-3 ${idx > 0 ? 'border-t border-quant-border' : ''}`}>
-                                      <div className="flex items-center gap-2 mb-2">
-                                        <span className={`text-xs font-bold px-2 py-0.5 rounded ${
-                                          signal.strategy === 'LONG'
-                                            ? 'bg-accent-green/20 text-accent-green'
-                                            : 'bg-accent-red/20 text-accent-red'
-                                        }`}>
-                                          {signal.strategy}
-                                        </span>
-                                        <span className="font-medium text-white">{signal.asset}</span>
-                                        <span className="ml-auto text-xs text-gray-500">IPE: {signal.ipe}%</span>
+                                    <div key={signal.id} className="bg-quant-card rounded-xl border border-quant-border overflow-hidden">
+                                      {/* Trade Header */}
+                                      <div className="p-3 border-b border-quant-border bg-quant-surface/50">
+                                        <div className="flex items-center gap-2">
+                                          <span className={`text-xs font-bold px-2 py-0.5 rounded ${
+                                            signal.strategy === 'LONG'
+                                              ? 'bg-accent-green/20 text-accent-green'
+                                              : 'bg-accent-red/20 text-accent-red'
+                                          }`}>
+                                            {signal.strategy}
+                                          </span>
+                                          <span className="font-medium text-white">{signal.asset}</span>
+                                          <span className="ml-auto text-xs text-gray-500">IPE: {signal.ipe}%</span>
+                                        </div>
+                                        <div className="grid grid-cols-4 gap-2 text-xs mt-2">
+                                          <div>
+                                            <span className="text-gray-500">Entry</span>
+                                            <span className="text-white font-mono ml-1">${signal.entry}</span>
+                                          </div>
+                                          <div>
+                                            <span className="text-gray-500">TP</span>
+                                            <span className="text-accent-green font-mono ml-1">${signal.takeProfit}</span>
+                                          </div>
+                                          <div>
+                                            <span className="text-gray-500">SL</span>
+                                            <span className="text-accent-red font-mono ml-1">${signal.stopLoss}</span>
+                                          </div>
+                                          <div>
+                                            <span className="text-gray-500">R:R</span>
+                                            <span className="text-white font-mono ml-1">{signal.riskRewardRatio || '2.0'}:1</span>
+                                          </div>
+                                        </div>
                                       </div>
 
-                                      {/* Trade Parameters */}
-                                      <div className="grid grid-cols-4 gap-2 text-xs">
-                                        <div>
-                                          <span className="text-gray-500 block">Entry</span>
-                                          <span className="text-white font-mono">${signal.entry}</span>
+                                      {/* AI Reasoning */}
+                                      <div className="p-3">
+                                        <div className="text-sm text-gray-300 mb-3">
+                                          {signal.aiReasoning || signal.explanation || 'Razonamiento del AI no disponible para trades antiguos.'}
                                         </div>
-                                        <div>
-                                          <span className="text-gray-500 block">TP</span>
-                                          <span className="text-accent-green font-mono">${signal.takeProfit}</span>
-                                        </div>
-                                        <div>
-                                          <span className="text-gray-500 block">SL</span>
-                                          <span className="text-accent-red font-mono">${signal.stopLoss}</span>
-                                        </div>
-                                        <div>
-                                          <span className="text-gray-500 block">R:R</span>
-                                          <span className="text-white font-mono">{signal.riskRewardRatio || '2.0'}:1</span>
-                                        </div>
+
+                                        {/* Insights */}
+                                        {signal.insights && signal.insights.length > 0 && (
+                                          <div className="space-y-1">
+                                            <span className="text-[10px] text-gray-500 uppercase">Factores clave:</span>
+                                            <div className="flex flex-wrap gap-1.5">
+                                              {signal.insights.map((insight, i) => (
+                                                <span key={i} className="text-xs px-2 py-1 rounded-lg bg-quant-surface text-gray-400">
+                                                  {insight}
+                                                </span>
+                                              ))}
+                                            </div>
+                                          </div>
+                                        )}
                                       </div>
                                     </div>
                                   ))}
@@ -975,7 +939,7 @@ export default function Incubator() {
                               <div className="flex items-center justify-center gap-4 text-[10px] text-gray-500 pt-2">
                                 <span>Generado: {new Date(egg.createdAt).toLocaleString()}</span>
                                 <span>•</span>
-                                <span>Modo: Simulación</span>
+                                <span>{AI_MODEL_LABELS[egg.config?.aiModel]?.name || 'AI'}</span>
                                 <span>•</span>
                                 <span>{eggSignals.length} trades</span>
                               </div>

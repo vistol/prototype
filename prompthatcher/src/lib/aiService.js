@@ -2,7 +2,7 @@
 import { fetchBinancePrices } from './priceService'
 
 // Minimum Risk/Reward ratio (Shell Calibration)
-const MIN_RISK_REWARD_RATIO = 2.0 // Minimum 1:2 (reward must be 2x the risk)
+const MIN_RISK_REWARD_RATIO = 2.0
 
 // Calculate R:R ratio
 export const calculateRiskReward = (entry, takeProfit, stopLoss, strategy) => {
@@ -22,34 +22,6 @@ export const calculateRiskReward = (entry, takeProfit, stopLoss, strategy) => {
 
   if (risk <= 0) return 0
   return reward / risk
-}
-
-// Calculate IPE using standard formula if prompt doesn't specify one
-export const calculateStandardIPE = (trade) => {
-  // Fundamental factors (simulated - in production these would come from real data)
-  const fundamentalFactors = {
-    teamScore: Math.random() * 3 + 7, // 7-10
-    utilityScore: Math.random() * 3 + 6, // 6-9
-    adoptionScore: Math.random() * 4 + 5, // 5-9
-  }
-
-  // Technical factors (simulated)
-  const technicalFactors = {
-    trendScore: Math.random() * 3 + 6, // 6-9 (MA analysis)
-    momentumScore: Math.random() * 4 + 5, // 5-9 (RSI)
-    volumeScore: Math.random() * 3 + 6, // 6-9
-  }
-
-  // Weights
-  const w1 = 0.4 // Fundamental weight
-  const w2 = 0.6 // Technical weight
-
-  const fundamentalSum = Object.values(fundamentalFactors).reduce((a, b) => a + b, 0) / 3
-  const technicalSum = Object.values(technicalFactors).reduce((a, b) => a + b, 0) / 3
-
-  const ipe = (fundamentalSum * w1 + technicalSum * w2) * 10
-
-  return Math.min(Math.round(ipe), 95)
 }
 
 // Available crypto assets
@@ -86,13 +58,276 @@ const fetchRealPrices = async (assets) => {
   }
 }
 
-// Generate trade signals based on prompt parameters
-export const generateTradesFromPrompt = async (prompt, settings, numResults = 3) => {
-  const trades = []
+// Build the prompt to send to AI
+const buildAIPrompt = (userPrompt, settings, prices, config) => {
+  const priceList = Object.entries(prices)
+    .map(([asset, price]) => `- ${asset}: $${price.toLocaleString()}`)
+    .join('\n')
 
-  // Select random assets without repetition
+  return `You are a quantitative trading analyst. Based on the user's trading strategy and current market prices, generate ${config.numResults || 3} specific trade signals.
+
+## USER'S TRADING STRATEGY:
+${userPrompt.content}
+
+## CURRENT MARKET PRICES (Real-time from Binance):
+${priceList}
+
+## CONFIGURATION:
+- Capital: $${config.capital || 1000}
+- Leverage: ${config.leverage || 5}x
+- Target Profit: ${config.targetPct || 10}% on capital
+- Execution Mode: ${config.executionTime || 'target'}
+- Minimum IPE Score: ${config.minIpe || 80}%
+
+## REQUIRED OUTPUT FORMAT:
+You MUST respond with ONLY a valid JSON array. No markdown, no explanations outside the JSON.
+Each trade must have this exact structure:
+
+[
+  {
+    "asset": "BTC/USDT",
+    "strategy": "LONG",
+    "entry": 95000.00,
+    "takeProfit": 97000.00,
+    "stopLoss": 94000.00,
+    "ipe": 85,
+    "reasoning": "Detailed explanation of why this trade was selected based on the user's strategy...",
+    "insights": ["Key factor 1", "Key factor 2", "Key factor 3"]
+  }
+]
+
+## RULES:
+1. Use ONLY the assets from the provided price list
+2. Entry price should be very close to current price (within 0.5%)
+3. For target-based trades: TP distance = (target% / leverage) from entry
+4. Risk:Reward ratio must be at least 2:1
+5. IPE score (Investment Potential Estimate) should be 70-95 based on setup quality
+6. Reasoning must explain HOW the user's strategy applies to this specific trade
+7. Strategy must be either "LONG" or "SHORT"
+8. All prices must be numbers (not strings)
+
+Generate ${config.numResults || 3} trades now:`
+}
+
+// Parse AI response to extract trades
+const parseAIResponse = (responseText, prices, config) => {
+  try {
+    // Try to extract JSON from the response
+    let jsonStr = responseText.trim()
+
+    // Remove markdown code blocks if present
+    if (jsonStr.startsWith('```json')) {
+      jsonStr = jsonStr.replace(/^```json\s*/, '').replace(/\s*```$/, '')
+    } else if (jsonStr.startsWith('```')) {
+      jsonStr = jsonStr.replace(/^```\s*/, '').replace(/\s*```$/, '')
+    }
+
+    // Find JSON array in the response
+    const jsonMatch = jsonStr.match(/\[[\s\S]*\]/)
+    if (jsonMatch) {
+      jsonStr = jsonMatch[0]
+    }
+
+    const trades = JSON.parse(jsonStr)
+
+    if (!Array.isArray(trades)) {
+      throw new Error('Response is not an array')
+    }
+
+    // Validate and enhance each trade
+    return trades.map((trade, i) => {
+      const asset = trade.asset
+      const currentPrice = prices[asset]
+
+      if (!currentPrice) {
+        console.warn(`AI suggested unknown asset: ${asset}`)
+        return null
+      }
+
+      const decimals = getDecimalPlaces(asset, currentPrice)
+      const entry = parseFloat(trade.entry) || currentPrice
+      const takeProfit = parseFloat(trade.takeProfit)
+      const stopLoss = parseFloat(trade.stopLoss)
+      const strategy = trade.strategy?.toUpperCase() === 'SHORT' ? 'SHORT' : 'LONG'
+
+      // Calculate R:R
+      const rrRatio = calculateRiskReward(entry, takeProfit, stopLoss, strategy)
+
+      // Calculate percentages
+      let riskPercent, rewardPercent
+      if (strategy === 'LONG') {
+        rewardPercent = ((takeProfit - entry) / entry) * 100
+        riskPercent = ((entry - stopLoss) / entry) * 100
+      } else {
+        rewardPercent = ((entry - takeProfit) / entry) * 100
+        riskPercent = ((stopLoss - entry) / entry) * 100
+      }
+
+      return {
+        id: `trade-${Date.now()}-${i}-${Math.random().toString(36).substr(2, 9)}`,
+        promptId: config.promptId,
+        promptName: config.promptName,
+        asset,
+        strategy,
+        entry: entry.toFixed(decimals),
+        takeProfit: takeProfit.toFixed(decimals),
+        stopLoss: stopLoss.toFixed(decimals),
+        currentPrice: currentPrice.toFixed(decimals),
+        riskRewardRatio: rrRatio.toFixed(2),
+        riskPercent: riskPercent.toFixed(2),
+        rewardPercent: rewardPercent.toFixed(2),
+        targetPct: config.targetPct || null,
+        ipe: Math.min(95, Math.max(70, parseInt(trade.ipe) || 80)),
+        explanation: trade.reasoning || 'AI-generated trade based on user strategy.',
+        insights: trade.insights || ['Technical setup identified', 'Risk parameters calculated'],
+        aiReasoning: trade.reasoning || 'No detailed reasoning provided.',
+        executionTime: config.executionTime,
+        leverage: config.leverage || 5,
+        capital: config.capital / (config.numResults || 3),
+        createdAt: new Date().toISOString(),
+        status: 'pending',
+        selected: false
+      }
+    }).filter(Boolean)
+
+  } catch (error) {
+    console.error('Failed to parse AI response:', error)
+    console.error('Raw response:', responseText)
+    throw new Error(`Failed to parse AI response: ${error.message}`)
+  }
+}
+
+// Call Google Gemini API
+const callGeminiAPI = async (prompt, apiKey) => {
+  const response = await fetch(
+    `https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key=${apiKey}`,
+    {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        contents: [{
+          parts: [{ text: prompt }]
+        }],
+        generationConfig: {
+          temperature: 0.7,
+          topK: 40,
+          topP: 0.95,
+          maxOutputTokens: 2048,
+        }
+      })
+    }
+  )
+
+  if (!response.ok) {
+    const error = await response.json()
+    throw new Error(error.error?.message || `Gemini API error: ${response.status}`)
+  }
+
+  const data = await response.json()
+
+  if (!data.candidates?.[0]?.content?.parts?.[0]?.text) {
+    throw new Error('No response from Gemini')
+  }
+
+  return data.candidates[0].content.parts[0].text
+}
+
+// Call OpenAI API
+const callOpenAIAPI = async (prompt, apiKey, model = 'gpt-4') => {
+  const response = await fetch('https://api.openai.com/v1/chat/completions', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${apiKey}`
+    },
+    body: JSON.stringify({
+      model: model,
+      messages: [
+        {
+          role: 'system',
+          content: 'You are a quantitative trading analyst. Always respond with valid JSON only.'
+        },
+        {
+          role: 'user',
+          content: prompt
+        }
+      ],
+      temperature: 0.7,
+      max_tokens: 2048
+    })
+  })
+
+  if (!response.ok) {
+    const error = await response.json()
+    throw new Error(error.error?.message || `OpenAI API error: ${response.status}`)
+  }
+
+  const data = await response.json()
+
+  if (!data.choices?.[0]?.message?.content) {
+    throw new Error('No response from OpenAI')
+  }
+
+  return data.choices[0].message.content
+}
+
+// Call xAI Grok API
+const callGrokAPI = async (prompt, apiKey) => {
+  const response = await fetch('https://api.x.ai/v1/chat/completions', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${apiKey}`
+    },
+    body: JSON.stringify({
+      model: 'grok-beta',
+      messages: [
+        {
+          role: 'system',
+          content: 'You are a quantitative trading analyst. Always respond with valid JSON only.'
+        },
+        {
+          role: 'user',
+          content: prompt
+        }
+      ],
+      temperature: 0.7,
+      max_tokens: 2048
+    })
+  })
+
+  if (!response.ok) {
+    const error = await response.json()
+    throw new Error(error.error?.message || `Grok API error: ${response.status}`)
+  }
+
+  const data = await response.json()
+
+  if (!data.choices?.[0]?.message?.content) {
+    throw new Error('No response from Grok')
+  }
+
+  return data.choices[0].message.content
+}
+
+// Main function to generate trades from prompt using AI
+export const generateTradesFromPrompt = async (prompt, settings, numResults = 3) => {
+  console.log('Generating trades with AI...')
+  console.log('Prompt:', prompt.name)
+  console.log('Provider:', settings.aiProvider)
+
+  // Check for API key
+  const apiKey = settings.apiKeys?.[settings.aiProvider]
+
+  if (!apiKey) {
+    throw new Error(`No API key configured for ${settings.aiProvider}. Please add your API key in Settings.`)
+  }
+
+  // Select random assets
   const shuffledAssets = [...CRYPTO_ASSETS].sort(() => Math.random() - 0.5)
-  const selectedAssets = shuffledAssets.slice(0, numResults)
+  const selectedAssets = shuffledAssets.slice(0, Math.min(numResults * 2, 10)) // Get more for AI to choose from
 
   // Fetch real prices from Binance
   console.log('Fetching real prices from Binance for:', selectedAssets)
@@ -103,221 +338,86 @@ export const generateTradesFromPrompt = async (prompt, settings, numResults = 3)
   }
 
   console.log('Real prices fetched:', realPrices)
-  console.log('Prompt config:', { targetPct: prompt.targetPct, leverage: prompt.leverage, executionTime: prompt.executionTime })
 
-  for (let i = 0; i < numResults; i++) {
-    const asset = selectedAssets[i]
-    const currentPrice = realPrices[asset]
-
-    if (!currentPrice) {
-      console.warn(`No price for ${asset}, skipping`)
-      continue
-    }
-
-    const strategy = Math.random() > 0.5 ? 'LONG' : 'SHORT'
-    const decimals = getDecimalPlaces(asset, currentPrice)
-
-    // Calculate entry, TP, and SL based on strategy and execution mode
-    let entry, takeProfit, stopLoss, riskPercent, rewardPercent
-
-    // Check if using target-based execution with a profit target
-    const useTargetBased = prompt.executionTime === 'target' && prompt.targetPct > 0
-    const leverage = prompt.leverage || 5
-    const targetPct = prompt.targetPct || 10 // Default 10% if not specified
-
-    if (useTargetBased) {
-      // TARGET-BASED MODE: Calculate TP/SL based on user's profit target and leverage
-      //
-      // Formula: To achieve X% profit on capital with Y leverage,
-      // the price needs to move by (X / Y) percent
-      //
-      // Example: 100% profit (2x) with 5x leverage = 20% price move needed
-
-      const priceMovementNeeded = targetPct / leverage / 100 // Convert to decimal
-
-      // Risk: Set SL at a reasonable distance (typically 1/2 to 1/3 of the reward)
-      // This maintains a good R:R ratio while respecting the target
-      const riskRatio = 0.4 // Risk 40% of reward distance for ~2.5:1 R:R
-      riskPercent = priceMovementNeeded * riskRatio
-      rewardPercent = priceMovementNeeded
-
-      console.log(`Target mode: ${targetPct}% profit @ ${leverage}x = ${(priceMovementNeeded * 100).toFixed(2)}% price move needed`)
-
-    } else {
-      // NON-TARGET MODE: Use the standard shell calibration R:R approach
-      // Risk: 1.5-3% (tighter stops for better R:R)
-      riskPercent = 0.015 + Math.random() * 0.015 // 1.5-3%
-
-      // Reward: At least 2x the risk (Shell Calibration)
-      const rrMultiplier = MIN_RISK_REWARD_RATIO + Math.random() * 1.5 // 2.0-3.5x
-      rewardPercent = riskPercent * rrMultiplier
-    }
-
-    if (strategy === 'LONG') {
-      // Entry at current price (or slightly below for limit order)
-      entry = currentPrice * (1 - Math.random() * 0.003) // 0-0.3% below current
-      stopLoss = entry * (1 - riskPercent)
-      takeProfit = entry * (1 + rewardPercent)
-    } else {
-      // Entry at current price (or slightly above for limit order)
-      entry = currentPrice * (1 + Math.random() * 0.003) // 0-0.3% above current
-      stopLoss = entry * (1 + riskPercent)
-      takeProfit = entry * (1 - rewardPercent)
-    }
-
-    // Generate explanation based on prompt mode
-    const explanations = [
-      `Based on ${prompt.mode === 'auto' ? 'AI-generated scientific analysis' : 'manual strategy'}: ${asset} shows ${strategy === 'LONG' ? 'bullish' : 'bearish'} momentum with strong ${strategy === 'LONG' ? 'support' : 'resistance'} levels identified.`,
-      `Technical analysis indicates ${strategy === 'LONG' ? 'accumulation' : 'distribution'} phase for ${asset}. RSI and MACD alignment suggests favorable ${strategy.toLowerCase()} entry.`,
-      `Market structure analysis for ${asset} reveals ${strategy === 'LONG' ? 'higher lows forming' : 'lower highs forming'}. Volume profile supports the ${strategy.toLowerCase()} thesis.`
-    ]
-
-    // Generate insights
-    const insightPool = [
-      `${strategy === 'LONG' ? 'Strong bid wall' : 'Heavy resistance'} at key level`,
-      'Volume increasing on recent candles',
-      `RSI ${strategy === 'LONG' ? 'recovering from oversold' : 'declining from overbought'}`,
-      'MACD histogram showing expansion',
-      `Price ${strategy === 'LONG' ? 'above' : 'below'} key moving averages`,
-      'Funding rates favorable for position',
-      'Order flow imbalance detected',
-      'Whale accumulation signals present'
-    ]
-
-    const shuffledInsights = [...insightPool].sort(() => Math.random() - 0.5)
-
-    // Calculate actual R:R ratio
-    const rrRatio = calculateRiskReward(entry, takeProfit, stopLoss, strategy)
-
-    const trade = {
-      id: `trade-${Date.now()}-${i}-${Math.random().toString(36).substr(2, 9)}`,
-      promptId: prompt.id,
-      promptName: prompt.name,
-      asset,
-      strategy,
-      entry: entry.toFixed(decimals),
-      takeProfit: takeProfit.toFixed(decimals),
-      stopLoss: stopLoss.toFixed(decimals),
-      currentPrice: currentPrice.toFixed(decimals), // Store the real price for reference
-      riskRewardRatio: rrRatio.toFixed(2), // Shell Calibration: Store R:R ratio
-      riskPercent: (riskPercent * 100).toFixed(2),
-      rewardPercent: (rewardPercent * 100).toFixed(2),
-      targetPct: useTargetBased ? targetPct : null, // Store target % for reference
-      ipe: calculateStandardIPE({ asset, strategy }),
-      explanation: explanations[Math.floor(Math.random() * explanations.length)],
-      insights: shuffledInsights.slice(0, 3),
-      executionTime: prompt.executionTime,
-      leverage: prompt.leverage || 5, // Store leverage with default fallback
-      capital: prompt.capital / numResults, // Divide capital among trades
-      createdAt: new Date().toISOString(),
-      status: 'pending', // pending -> active -> closed
-      selected: false
-    }
-
-    // Filter by minimum IPE
-    if (trade.ipe >= (prompt.minIpe || 70)) {
-      trades.push(trade)
-    }
+  // Prepare config
+  const config = {
+    promptId: prompt.id,
+    promptName: prompt.name,
+    capital: prompt.capital || 1000,
+    leverage: prompt.leverage || 5,
+    targetPct: prompt.targetPct || 10,
+    executionTime: prompt.executionTime || 'target',
+    minIpe: prompt.minIpe || 80,
+    numResults: numResults
   }
 
-  // If we filtered out too many due to IPE, generate more with higher IPE
-  let attempts = 0
-  while (trades.length < numResults && attempts < 10) {
-    attempts++
-    const remainingAssets = CRYPTO_ASSETS.filter(a => !trades.find(t => t.asset === a))
-    if (remainingAssets.length === 0) break
+  // Build prompt for AI
+  const aiPrompt = buildAIPrompt(prompt, settings, realPrices, config)
+  console.log('AI Prompt built, calling API...')
 
-    const extraAsset = remainingAssets[Math.floor(Math.random() * remainingAssets.length)]
-
-    // Fetch price for extra asset
-    const extraPrices = await fetchRealPrices([extraAsset])
-    if (!extraPrices || !extraPrices[extraAsset]) continue
-
-    const currentPrice = extraPrices[extraAsset]
-    const strategy = Math.random() > 0.5 ? 'LONG' : 'SHORT'
-    const decimals = getDecimalPlaces(extraAsset, currentPrice)
-
-    // Use same target-based logic for extra trades
-    const useTargetBased = prompt.executionTime === 'target' && prompt.targetPct > 0
-    const leverage = prompt.leverage || 5
-    const targetPct = prompt.targetPct || 10
-
-    let entry, takeProfit, stopLoss
-    let extraRiskPercent, extraRewardPercent
-
-    if (useTargetBased) {
-      const priceMovementNeeded = targetPct / leverage / 100
-      extraRiskPercent = priceMovementNeeded * 0.4
-      extraRewardPercent = priceMovementNeeded
-    } else {
-      extraRiskPercent = 0.015 + Math.random() * 0.015
-      const extraRrMultiplier = MIN_RISK_REWARD_RATIO + Math.random() * 1.5
-      extraRewardPercent = extraRiskPercent * extraRrMultiplier
+  // Call appropriate AI API
+  let aiResponse
+  try {
+    switch (settings.aiProvider) {
+      case 'google':
+        aiResponse = await callGeminiAPI(aiPrompt, apiKey)
+        break
+      case 'openai':
+        aiResponse = await callOpenAIAPI(aiPrompt, apiKey, settings.aiModel || 'gpt-4')
+        break
+      case 'xai':
+        aiResponse = await callGrokAPI(aiPrompt, apiKey)
+        break
+      default:
+        throw new Error(`Unknown AI provider: ${settings.aiProvider}`)
     }
-
-    if (strategy === 'LONG') {
-      entry = currentPrice * (1 - Math.random() * 0.003)
-      stopLoss = entry * (1 - extraRiskPercent)
-      takeProfit = entry * (1 + extraRewardPercent)
-    } else {
-      entry = currentPrice * (1 + Math.random() * 0.003)
-      stopLoss = entry * (1 + extraRiskPercent)
-      takeProfit = entry * (1 - extraRewardPercent)
-    }
-
-    const extraRrRatio = calculateRiskReward(entry, takeProfit, stopLoss, strategy)
-
-    trades.push({
-      id: `trade-${Date.now()}-extra-${Math.random().toString(36).substr(2, 9)}`,
-      promptId: prompt.id,
-      promptName: prompt.name,
-      asset: extraAsset,
-      strategy,
-      entry: entry.toFixed(decimals),
-      takeProfit: takeProfit.toFixed(decimals),
-      stopLoss: stopLoss.toFixed(decimals),
-      currentPrice: currentPrice.toFixed(decimals),
-      riskRewardRatio: extraRrRatio.toFixed(2),
-      riskPercent: (extraRiskPercent * 100).toFixed(2),
-      rewardPercent: (extraRewardPercent * 100).toFixed(2),
-      targetPct: useTargetBased ? targetPct : null,
-      ipe: Math.max(prompt.minIpe || 70, Math.floor(Math.random() * 15 + 75)),
-      explanation: `AI-generated opportunity for ${extraAsset} based on market analysis.`,
-      insights: ['Favorable market conditions', 'Technical setup confirmed', `R:R ratio ${extraRrRatio.toFixed(1)}:1`],
-      executionTime: prompt.executionTime,
-      leverage: prompt.leverage || 5, // Store leverage with default fallback
-      capital: prompt.capital / numResults,
-      createdAt: new Date().toISOString(),
-      status: 'pending',
-      selected: false
-    })
+  } catch (error) {
+    console.error('AI API call failed:', error)
+    throw new Error(`AI API call failed: ${error.message}`)
   }
+
+  console.log('AI Response received:', aiResponse.substring(0, 200) + '...')
+
+  // Parse the response
+  const trades = parseAIResponse(aiResponse, realPrices, config)
 
   if (trades.length === 0) {
-    throw new Error('Could not generate trades with the required IPE threshold. Try lowering the minimum IPE.')
+    throw new Error('AI did not generate any valid trades. Please try again.')
   }
 
-  return trades.slice(0, numResults)
+  // Filter by minimum IPE
+  const filteredTrades = trades.filter(t => t.ipe >= (prompt.minIpe || 70))
+
+  if (filteredTrades.length === 0) {
+    throw new Error('No trades met the minimum IPE threshold. Try lowering the minimum IPE.')
+  }
+
+  console.log(`Generated ${filteredTrades.length} trades from AI`)
+
+  return filteredTrades.slice(0, numResults)
 }
 
-// Call actual AI API (for production use)
-export const callAIForTrades = async (prompt, systemPrompt, apiKey, provider) => {
-  // This would be the actual AI API call
-  // For now, we use the simulated generation
+// Calculate standard IPE (fallback if AI doesn't provide one)
+export const calculateStandardIPE = (trade) => {
+  const fundamentalFactors = {
+    teamScore: Math.random() * 3 + 7,
+    utilityScore: Math.random() * 3 + 6,
+    adoptionScore: Math.random() * 4 + 5,
+  }
 
-  // In production:
-  // const response = await fetch(getAIEndpoint(provider), {
-  //   method: 'POST',
-  //   headers: { 'Authorization': `Bearer ${apiKey}` },
-  //   body: JSON.stringify({
-  //     model: getModelForProvider(provider),
-  //     messages: [
-  //       { role: 'system', content: systemPrompt },
-  //       { role: 'user', content: prompt.content }
-  //     ]
-  //   })
-  // })
-  // return parseAIResponse(response)
+  const technicalFactors = {
+    trendScore: Math.random() * 3 + 6,
+    momentumScore: Math.random() * 4 + 5,
+    volumeScore: Math.random() * 3 + 6,
+  }
 
-  return null // Fall back to simulated generation
+  const w1 = 0.4
+  const w2 = 0.6
+
+  const fundamentalSum = Object.values(fundamentalFactors).reduce((a, b) => a + b, 0) / 3
+  const technicalSum = Object.values(technicalFactors).reduce((a, b) => a + b, 0) / 3
+
+  const ipe = (fundamentalSum * w1 + technicalSum * w2) * 10
+
+  return Math.min(Math.round(ipe), 95)
 }
