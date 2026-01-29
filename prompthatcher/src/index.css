@@ -176,3 +176,34 @@ input[type="range"]::-webkit-slider-thumb {
   @apply border-accent-red/30;
   box-shadow: inset 0 0 30px rgba(239, 68, 68, 0.1);
 }
+
+/* Animated gradient for loading button */
+@keyframes gradient-shift {
+  0% {
+    background-position: 0% 50%;
+  }
+  50% {
+    background-position: 100% 50%;
+  }
+  100% {
+    background-position: 0% 50%;
+  }
+}
+
+.animate-gradient {
+  animation: gradient-shift 2s ease infinite;
+}
+
+/* Pulsing glow for loading state */
+@keyframes pulse-glow {
+  0%, 100% {
+    box-shadow: 0 0 20px rgba(139, 92, 246, 0.4), 0 0 40px rgba(0, 240, 255, 0.2);
+  }
+  50% {
+    box-shadow: 0 0 40px rgba(139, 92, 246, 0.6), 0 0 80px rgba(0, 240, 255, 0.4);
+  }
+}
+
+.pulse-glow {
+  animation: pulse-glow 1.5s ease-in-out infinite;
+}

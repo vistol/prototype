@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { X, PenTool, Clock, DollarSign, TrendingUp, Cpu, Target, Hash, ArrowRight, BookOpen, AlertTriangle, Zap, AlertCircle, Check } from 'lucide-react'
 import useStore from '../store/useStore'
@@ -71,8 +71,22 @@ const calculateEstimate = (targetPct, leverage) => {
   return { timeStr, risk, riskColor, liquidationMove, estimatedDays }
 }
 
+// Loading messages for trade generation - egg themed!
+const LOADING_MESSAGES = [
+  { text: 'Warming up the incubator...', icon: '🔥' },
+  { text: 'Analyzing market DNA...', icon: '🧬' },
+  { text: 'Consulting the trading oracle...', icon: '🔮' },
+  { text: 'Hatching brilliant ideas...', icon: '💡' },
+  { text: 'Scanning for golden opportunities...', icon: '✨' },
+  { text: 'Cracking the market code...', icon: '🥚' },
+  { text: 'Feeding the AI neurons...', icon: '🧠' },
+  { text: 'Calibrating profit sensors...', icon: '📡' },
+  { text: 'Preparing your nest egg...', icon: '🪺' },
+  { text: 'Almost ready to hatch...', icon: '🐣' },
+]
+
 export default function NewPromptModal() {
-  const { setNewPromptModalOpen, addPrompt, generateTrades, prompts, settings } = useStore()
+  const { setNewPromptModalOpen, addPrompt, generateTrades, prompts, settings, isGeneratingTrades } = useStore()
   const [mode, setMode] = useState('library') // 'library' or 'manual'
   const [name, setName] = useState('')
   const [content, setContent] = useState('')
@@ -82,6 +96,19 @@ export default function NewPromptModal() {
   const [minIpe, setMinIpe] = useState(80)
   const [numResults, setNumResults] = useState(3)
   const [targetPct, setTargetPct] = useState(10) // Target profit percentage
+  const [loadingMsgIndex, setLoadingMsgIndex] = useState(0)
+
+  // Cycle through loading messages while generating
+  useEffect(() => {
+    if (isGeneratingTrades) {
+      const interval = setInterval(() => {
+        setLoadingMsgIndex(prev => (prev + 1) % LOADING_MESSAGES.length)
+      }, 2000) // Change message every 2 seconds
+      return () => clearInterval(interval)
+    } else {
+      setLoadingMsgIndex(0)
+    }
+  }, [isGeneratingTrades])
 
   // Get configured AI providers (those with API keys)
   const configuredProviders = useMemo(() => {
@@ -577,15 +604,48 @@ export default function NewPromptModal() {
         <div className="shrink-0 p-4 border-t border-quant-border">
           <motion.button
             onClick={handleSubmit}
-            disabled={!canSubmit()}
+            disabled={!canSubmit() || isGeneratingTrades}
             whileTap={{ scale: 0.98 }}
-            className="w-full py-3.5 rounded-xl bg-gradient-to-r from-accent-cyan to-electric-600 text-quant-bg font-bold disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+            className={`w-full py-3.5 rounded-xl font-bold disabled:cursor-not-allowed flex items-center justify-center gap-2 transition-all duration-300 ${
+              isGeneratingTrades
+                ? 'bg-gradient-to-r from-accent-purple via-accent-cyan to-accent-purple bg-[length:200%_100%] animate-gradient text-white'
+                : 'bg-gradient-to-r from-accent-cyan to-electric-600 text-quant-bg disabled:opacity-50'
+            }`}
             style={{
-              boxShadow: canSubmit() ? '0 0 20px rgba(0, 240, 255, 0.25)' : 'none'
+              boxShadow: isGeneratingTrades
+                ? '0 0 30px rgba(139, 92, 246, 0.4), 0 0 60px rgba(0, 240, 255, 0.2)'
+                : canSubmit() ? '0 0 20px rgba(0, 240, 255, 0.25)' : 'none'
             }}
           >
-            Generate Trades
-            <ArrowRight size={18} />
+            {isGeneratingTrades ? (
+              <motion.div
+                className="flex items-center gap-2"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+              >
+                <motion.span
+                  animate={{ rotate: 360 }}
+                  transition={{ duration: 2, repeat: Infinity, ease: 'linear' }}
+                  className="text-lg"
+                >
+                  {LOADING_MESSAGES[loadingMsgIndex].icon}
+                </motion.span>
+                <motion.span
+                  key={loadingMsgIndex}
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -10 }}
+                  className="text-sm"
+                >
+                  {LOADING_MESSAGES[loadingMsgIndex].text}
+                </motion.span>
+              </motion.div>
+            ) : (
+              <>
+                Generate Trades
+                <ArrowRight size={18} />
+              </>
+            )}
           </motion.button>
         </div>
       </motion.div>
