@@ -4,8 +4,9 @@ import useStore from '../store/useStore'
 import SyncStatus from './SyncStatus'
 
 export default function Header({ title, subtitle, rightAction }) {
-  const { priceStatus, refreshPrices } = useStore()
-  const { isFetching, lastUpdated, source, fallbackUsed, error } = priceStatus
+  const priceStatus = useStore((state) => state.priceStatus) || {}
+  const refreshPrices = useStore((state) => state.refreshPrices)
+  const { isFetching = false, lastUpdated = null, source = null, fallbackUsed = false, error = null } = priceStatus
 
   const handleRefresh = async () => {
     if (!isFetching) {

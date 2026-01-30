@@ -3,10 +3,14 @@ import { Cloud, CloudOff, RefreshCw, Check, AlertCircle } from 'lucide-react'
 import useStore from '../store/useStore'
 
 export default function SyncStatus() {
-  const { syncStatus, settings, syncToCloud, loadFromCloud } = useStore()
+  const syncStatus = useStore((state) => state.syncStatus) || {}
+  const settings = useStore((state) => state.settings) || {}
+  const syncToCloud = useStore((state) => state.syncToCloud)
+  const loadFromCloud = useStore((state) => state.loadFromCloud)
 
-  const isConnected = settings.supabase.connected
-  const { syncing, loading, lastSynced, error } = syncStatus
+  const supabase = settings.supabase || {}
+  const isConnected = supabase.connected || false
+  const { syncing = false, loading = false, lastSynced = null, error = null } = syncStatus
 
   const formatLastSynced = () => {
     if (!lastSynced) return 'Never'
@@ -34,7 +38,7 @@ export default function SyncStatus() {
     }
   }
 
-  if (!settings.supabase.url || !settings.supabase.anonKey) {
+  if (!supabase.url || !supabase.anonKey) {
     return null
   }
 
