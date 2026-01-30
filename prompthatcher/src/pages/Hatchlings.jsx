@@ -1,7 +1,6 @@
 import { useState, useMemo } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Trophy, TrendingUp, TrendingDown, Target, ChevronDown, ChevronUp, BarChart3, FileText, Filter, ExternalLink, Layers } from 'lucide-react'
-import { useNavigate } from 'react-router-dom'
 import useStore from '../store/useStore'
 import Header from '../components/Header'
 import EggIcon from '../components/EggIcon'
@@ -13,13 +12,12 @@ const safeToFixed = (num, digits = 1) => {
 }
 
 export default function Hatchlings() {
-  const navigate = useNavigate()
-
   // Get store data with safe defaults
   const eggs = useStore((state) => state.eggs) || []
   const signals = useStore((state) => state.signals) || []
   const prices = useStore((state) => state.prices) || {}
   const prompts = useStore((state) => state.prompts) || []
+  const setActiveTab = useStore((state) => state.setActiveTab)
 
   const [expandedPrompt, setExpandedPrompt] = useState(null)
   const [sortBy, setSortBy] = useState('pnl')
@@ -606,7 +604,7 @@ export default function Hatchlings() {
                                       <button
                                         onClick={(e) => {
                                           e.stopPropagation()
-                                          navigate('/incubator')
+                                          setActiveTab('incubator')
                                         }}
                                         className="p-2 rounded-lg hover:bg-quant-surface text-gray-500 hover:text-accent-cyan transition-colors"
                                         title="View in Incubator"
