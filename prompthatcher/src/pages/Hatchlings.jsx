@@ -8,7 +8,12 @@ import EggIcon from '../components/EggIcon'
 
 export default function Hatchlings() {
   const navigate = useNavigate()
-  const { eggs, signals, prices, prompts } = useStore()
+  const store = useStore()
+  const eggs = store?.eggs || []
+  const signals = store?.signals || []
+  const prices = store?.prices || {}
+  const prompts = store?.prompts || []
+
   const [expandedPrompt, setExpandedPrompt] = useState(null)
   const [sortBy, setSortBy] = useState('pnl') // 'pnl', 'winRate', 'eggs', 'trades'
   const [filterBy, setFilterBy] = useState('all') // 'all', 'profitable', 'unprofitable'
@@ -69,19 +74,27 @@ export default function Hatchlings() {
 
   // Aggregate data by prompt
   const promptStats = useMemo(() => {
-    // Get all completed eggs
-    const completedEggs = eggs.filter(isEggCompleted)
+    try {
+      // Safeguard: ensure eggs is an array
+      if (!Array.isArray(eggs)) return []
+
+      // Get all completed eggs
+      const completedEggs = eggs.filter(isEggCompleted)
 
     // Group eggs by promptId or promptName
     const promptGroups = {}
 
     completedEggs.forEach(egg => {
+      if (!egg) return
+
       const promptKey = egg.promptId || egg.promptName || 'Unknown'
       const promptName = egg.promptName || 'Unknown Strategy'
 
       if (!promptGroups[promptKey]) {
-        // Try to find the prompt in the prompts list
-        const promptData = prompts.find(p => p.id === egg.promptId || p.name === egg.promptName)
+        // Try to find the prompt in the prompts list (safely)
+        const promptData = Array.isArray(prompts)
+          ? prompts.find(p => p?.id === egg.promptId || p?.name === egg.promptName)
+          : null
 
         promptGroups[promptKey] = {
           id: promptKey,
@@ -103,9 +116,9 @@ export default function Hatchlings() {
       }
 
       promptGroups[promptKey].eggs.push(eggData)
-      promptGroups[promptKey].totalTrades += results.totalTrades
-      promptGroups[promptKey].totalWins += results.wins
-      promptGroups[promptKey].totalLosses += results.losses
+      promptGroups[promptKey].totalTrades += results?.totalTrades || 0
+      promptGroups[promptKey].totalWins += results?.wins || 0
+      promptGroups[promptKey].totalLosses += results?.losses || 0
     })
 
     // Calculate aggregate stats for each prompt
@@ -151,27 +164,40 @@ export default function Hatchlings() {
     })
 
     return result
+    } catch (error) {
+      console.error('Error calculating prompt stats:', error)
+      return []
+    }
   }, [eggs, signals, prices, prompts, filterBy, sortBy])
 
   // Global stats
   const globalStats = useMemo(() => {
-    const allPnl = promptStats.reduce((sum, p) => sum + p.totalPnl * p.eggs.length, 0)
-    const totalEggs = promptStats.reduce((sum, p) => sum + p.eggs.length, 0)
-    const avgPnl = totalEggs > 0 ? allPnl / totalEggs : 0
+    try {
+      if (!Array.isArray(promptStats) || promptStats.length === 0) {
+        return { totalPrompts: 0, totalEggs: 0, totalTrades: 0, avgPnl: 0, avgWinRate: 0, profitablePrompts: 0 }
+      }
 
-    const totalTrades = promptStats.reduce((sum, p) => sum + p.totalTrades, 0)
-    const totalWins = promptStats.reduce((sum, p) => sum + p.totalWins, 0)
-    const avgWinRate = totalTrades > 0 ? Math.round((totalWins / totalTrades) * 100) : 0
+      const allPnl = promptStats.reduce((sum, p) => sum + (p?.totalPnl || 0) * (p?.eggs?.length || 0), 0)
+      const totalEggs = promptStats.reduce((sum, p) => sum + (p?.eggs?.length || 0), 0)
+      const avgPnl = totalEggs > 0 ? allPnl / totalEggs : 0
 
-    const profitablePrompts = promptStats.filter(p => p.totalPnl >= 0).length
+      const totalTrades = promptStats.reduce((sum, p) => sum + (p?.totalTrades || 0), 0)
+      const totalWins = promptStats.reduce((sum, p) => sum + (p?.totalWins || 0), 0)
+      const avgWinRate = totalTrades > 0 ? Math.round((totalWins / totalTrades) * 100) : 0
 
-    return {
-      totalPrompts: promptStats.length,
-      totalEggs,
-      totalTrades,
-      avgPnl,
-      avgWinRate,
-      profitablePrompts
+      const profitablePrompts = promptStats.filter(p => (p?.totalPnl || 0) >= 0).length
+
+      return {
+        totalPrompts: promptStats.length,
+        totalEggs,
+        totalTrades,
+        avgPnl,
+        avgWinRate,
+        profitablePrompts
+      }
+    } catch (error) {
+      console.error('Error calculating global stats:', error)
+      return { totalPrompts: 0, totalEggs: 0, totalTrades: 0, avgPnl: 0, avgWinRate: 0, profitablePrompts: 0 }
     }
   }, [promptStats])
 
