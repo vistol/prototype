@@ -14,10 +14,14 @@ export default function Hatchlings() {
   const [filterBy, setFilterBy] = useState('all') // 'all', 'profitable', 'unprofitable'
 
   // Check if egg is expired
-  const isEggExpired = (egg) => egg.expiresAt && new Date(egg.expiresAt) <= new Date()
+  const isEggExpired = (egg) => {
+    if (!egg?.expiresAt) return false
+    return new Date(egg.expiresAt) <= new Date()
+  }
 
   // Check if egg is completed (hatched or expired)
   const isEggCompleted = (egg) => {
+    if (!egg) return false
     return egg.status === 'hatched' || (egg.status === 'incubating' && isEggExpired(egg))
   }
 
@@ -41,19 +45,22 @@ export default function Hatchlings() {
 
   // Calculate egg results
   const calculateEggResults = (egg) => {
+    if (!egg?.trades || !Array.isArray(egg.trades)) {
+      return { totalPnl: 0, winRate: 0, totalTrades: 0, wins: 0, losses: 0 }
+    }
     const eggSignals = signals.filter(s => egg.trades.includes(s.id))
     if (eggSignals.length === 0) {
       return { totalPnl: 0, winRate: 0, totalTrades: 0, wins: 0, losses: 0 }
     }
 
     const pnlValues = eggSignals.map(s => getSignalPnl(s))
-    const avgPnl = pnlValues.reduce((sum, p) => sum + p, 0) / pnlValues.length
+    const avgPnl = pnlValues.reduce((sum, p) => sum + (p || 0), 0) / pnlValues.length
     const wins = pnlValues.filter(p => p > 0).length
     const losses = pnlValues.filter(p => p < 0).length
 
     return {
-      totalPnl: avgPnl,
-      winRate: Math.round((wins / eggSignals.length) * 100),
+      totalPnl: avgPnl || 0,
+      winRate: Math.round((wins / eggSignals.length) * 100) || 0,
       totalTrades: eggSignals.length,
       wins,
       losses
