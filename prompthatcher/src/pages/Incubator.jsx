@@ -853,20 +853,8 @@ Configuración:
                                       {/* Color bar indicator */}
                                       <div className={`w-1 self-stretch ${statusColor}`} />
 
-                                      {/* Pulsing dot for active trades */}
-                                      <div className="py-2.5 pl-2 pr-1">
-                                        {!isClosed ? (
-                                          <span className="relative flex h-2 w-2">
-                                            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-accent-cyan opacity-75"></span>
-                                            <span className="relative inline-flex rounded-full h-2 w-2 bg-accent-cyan"></span>
-                                          </span>
-                                        ) : (
-                                          <span className="inline-flex h-2 w-2" />
-                                        )}
-                                      </div>
-
                                       {/* Asset with direction */}
-                                      <div className="flex items-center gap-1.5 py-2.5 px-2 min-w-[80px]">
+                                      <div className="flex items-center gap-1.5 py-2.5 px-3 min-w-[80px]">
                                         {isLong ? (
                                           <TrendingUp size={12} className="text-accent-green" />
                                         ) : (
