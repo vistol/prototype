@@ -264,22 +264,36 @@ Configuración:
       : ((entry - price) / entry) * 100
   }
 
-  // Calculate egg PnL (capital-weighted)
+  // Calculate egg PnL (average of ALL trades - open and closed)
   const getEggPnl = (egg, status) => {
     if (status.isExpired) return null
-    const activeSignals = signals.filter(s => egg.trades.includes(s.id) && s.status === 'active')
-    let weightedPnl = 0, totalCap = 0
 
-    activeSignals.forEach(signal => {
-      const pnl = getPnl(signal)
-      const cap = parseFloat(signal.capital) || (egg.totalCapital / egg.trades.length)
+    // Get ALL signals for this egg (both active and closed)
+    const eggSignals = signals.filter(s => egg.trades.includes(s.id))
+    if (eggSignals.length === 0) return null
+
+    let totalPnl = 0
+    let validCount = 0
+
+    eggSignals.forEach(signal => {
+      let pnl = null
+
+      // For closed trades, use stored pnl
+      if (signal.status === 'closed' && signal.pnl !== undefined) {
+        pnl = signal.pnl
+      } else {
+        // For active trades, calculate real-time pnl
+        pnl = getPnl(signal)
+      }
+
       if (pnl !== null) {
-        weightedPnl += (pnl / 100) * cap
-        totalCap += cap
+        totalPnl += pnl
+        validCount++
       }
     })
 
-    return totalCap > 0 ? (weightedPnl / totalCap) * 100 : null
+    // Return average PnL across all trades
+    return validCount > 0 ? totalPnl / validCount : null
   }
 
   // CVD validation (simplified)
