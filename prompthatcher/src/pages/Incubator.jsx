@@ -839,7 +839,7 @@ Configuración:
 
                                 const statusColor = isClosed
                                   ? (signal.result === 'win' ? 'bg-accent-green' : 'bg-accent-red')
-                                  : 'bg-accent-cyan'
+                                  : (isProfit ? 'bg-accent-green' : 'bg-accent-red')
 
                                 return (
                                   <div key={signal.id}>
@@ -1030,7 +1030,7 @@ Configuración:
                                           Activos ({activeTrades.length})
                                         </span>
                                       </div>
-                                      <div className="rounded-xl overflow-hidden border border-accent-cyan/30 bg-accent-cyan/5">
+                                      <div className="rounded-xl overflow-hidden border border-accent-green/30 bg-accent-green/5">
                                         {activeTrades.map((signal, idx) => renderTradeRow(signal, idx, idx === 0))}
                                       </div>
                                     </div>
