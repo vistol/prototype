@@ -796,21 +796,30 @@ Configuración:
                           )})()}
 
                           {/* Trades Section - Show when trades tab active */}
-                          {/* NEW DESIGN: Minimal List (collapsed) + PnL-First (expanded) */}
+                          {/* DESIGN: Grouped by Active/Closed with headers */}
                           {getActiveTab(egg.id) === 'trades' && (
                           <div>
-                            <span className="text-[10px] text-gray-500 uppercase tracking-wider block mb-2">Trades ({eggSignals.length})</span>
+                            {(() => {
+                              // Format currency in English format: +$3,000.00 or -$30.00
+                              const formatCurrency = (amount) => {
+                                const sign = amount >= 0 ? '+' : '-'
+                                const absAmount = Math.abs(amount)
+                                return `${sign}$${absAmount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+                              }
 
-                            {/* Minimal List Design - Compact table-like view */}
-                            <div className="rounded-xl overflow-hidden border border-quant-border">
-                              {eggSignals.map((signal, idx) => {
+                              // Separate trades into active and closed
+                              const activeTrades = eggSignals.filter(s => s.status !== 'closed')
+                              const closedTrades = eggSignals.filter(s => s.status === 'closed')
+
+                              // Render a single trade row
+                              const renderTradeRow = (signal, idx, isFirstInGroup) => {
                                 const isLong = signal.strategy === 'LONG'
                                 const isClosed = signal.status === 'closed'
                                 const price = getPrice(signal.asset)
                                 const unrealizedPnl = getPnl(signal)
                                 const isTradeExpanded = expandedTrades[signal.id]
 
-                                // Calculate PnL values for display
+                                // Calculate PnL values
                                 const entry = parseFloat(signal.entry)
                                 const tp = parseFloat(signal.takeProfit)
                                 const sl = parseFloat(signal.stopLoss)
@@ -819,23 +828,18 @@ Configuración:
                                 const numTrades = eggSignals.length || 1
                                 const cap = signal.capital || (totalCap / numTrades)
 
-                                // Price movement percentages
                                 const tpMovePct = isLong ? ((tp - entry) / entry) * 100 : ((entry - tp) / entry) * 100
                                 const slMovePct = isLong ? ((entry - sl) / entry) * 100 : ((sl - entry) / entry) * 100
-
-                                // $ profit/loss with leverage
                                 const potentialProfit = (tpMovePct / 100) * lev * cap
                                 const potentialLoss = (slMovePct / 100) * lev * cap
 
-                                // Current PnL in dollars
                                 const currentPnlPct = isClosed ? (signal.pnl || 0) : (unrealizedPnl || 0)
                                 const currentPnlDollar = (currentPnlPct / 100) * lev * cap
                                 const isProfit = currentPnlPct >= 0
 
-                                // Determine status color
                                 const statusColor = isClosed
                                   ? (signal.result === 'win' ? 'bg-accent-green' : 'bg-accent-red')
-                                  : (unrealizedPnl >= 0 ? 'bg-accent-green' : unrealizedPnl < 0 ? 'bg-accent-red' : 'bg-accent-cyan')
+                                  : 'bg-accent-cyan'
 
                                 return (
                                   <div key={signal.id}>
@@ -843,37 +847,63 @@ Configuración:
                                     <div
                                       onClick={() => toggleTradeExpand(signal.id)}
                                       className={`flex items-center cursor-pointer transition-colors hover:bg-quant-surface/50 ${
-                                        idx !== 0 ? 'border-t border-quant-border/50' : ''
-                                      } ${isTradeExpanded ? 'bg-quant-surface/30' : ''}`}
+                                        !isFirstInGroup ? 'border-t border-quant-border/50' : ''
+                                      } ${isTradeExpanded ? 'bg-quant-surface/30' : ''} ${isClosed ? 'opacity-60' : ''}`}
                                     >
                                       {/* Color bar indicator */}
                                       <div className={`w-1 self-stretch ${statusColor}`} />
 
+                                      {/* Pulsing dot for active trades */}
+                                      <div className="py-2.5 pl-2 pr-1">
+                                        {!isClosed ? (
+                                          <span className="relative flex h-2 w-2">
+                                            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-accent-cyan opacity-75"></span>
+                                            <span className="relative inline-flex rounded-full h-2 w-2 bg-accent-cyan"></span>
+                                          </span>
+                                        ) : (
+                                          <span className="inline-flex h-2 w-2" />
+                                        )}
+                                      </div>
+
                                       {/* Asset with direction */}
-                                      <div className="flex items-center gap-1.5 py-2.5 px-3 min-w-[90px]">
+                                      <div className="flex items-center gap-1.5 py-2.5 px-2 min-w-[80px]">
                                         {isLong ? (
                                           <TrendingUp size={12} className="text-accent-green" />
                                         ) : (
                                           <TrendingDown size={12} className="text-accent-red" />
                                         )}
-                                        <span className="font-medium text-white text-sm">{signal.asset?.replace('/USDT', '')}</span>
+                                        <span className={`font-medium text-sm ${isClosed ? 'text-gray-400' : 'text-white'}`}>
+                                          {signal.asset?.replace('/USDT', '')}
+                                        </span>
                                       </div>
 
-                                      {/* Entry → Current */}
+                                      {/* Entry → Current/Exit */}
                                       <div className="flex-1 py-2.5 px-2 font-mono text-xs">
-                                        <span className="text-gray-400">{entry.toFixed(2)}</span>
+                                        <span className="text-gray-500">{entry.toFixed(2)}</span>
                                         <span className="text-gray-600 mx-1">→</span>
                                         <span className={isClosed ? 'text-gray-400' : 'text-white'}>
                                           {isClosed ? (signal.exitPrice || entry).toFixed(2) : (price || entry).toFixed(2)}
                                         </span>
                                       </div>
 
-                                      {/* PnL in $ */}
-                                      <div className={`py-2.5 px-2 font-mono text-sm font-bold min-w-[70px] text-right ${
-                                        isProfit ? 'text-accent-green' : 'text-accent-red'
-                                      }`}>
-                                        {isProfit ? '+' : ''}{currentPnlDollar.toFixed(0)}$
-                                      </div>
+                                      {/* PnL in $ for active, WIN/LOSS badge for closed */}
+                                      {isClosed ? (
+                                        <div className={`py-2.5 px-2 text-xs font-bold min-w-[70px] text-right flex items-center justify-end gap-1 ${
+                                          signal.result === 'win' ? 'text-accent-green' : 'text-accent-red'
+                                        }`}>
+                                          {signal.result === 'win' ? (
+                                            <>WIN <CheckCircle2 size={12} /></>
+                                          ) : (
+                                            <>LOSS <XCircle size={12} /></>
+                                          )}
+                                        </div>
+                                      ) : (
+                                        <div className={`py-2.5 px-2 font-mono text-sm font-bold min-w-[85px] text-right ${
+                                          isProfit ? 'text-accent-green' : 'text-accent-red'
+                                        }`}>
+                                          {formatCurrency(currentPnlDollar)}
+                                        </div>
+                                      )}
 
                                       {/* PnL in % */}
                                       <div className={`py-2.5 px-3 font-mono text-xs min-w-[65px] text-right ${
@@ -897,18 +927,18 @@ Configuración:
                                             {/* PnL Dominant Display */}
                                             <div className="flex items-center justify-between mb-3">
                                               <div className={`text-2xl font-bold font-mono ${isProfit ? 'text-accent-green' : 'text-accent-red'}`}>
-                                                {isProfit ? '+' : ''}{currentPnlDollar.toFixed(0)}$
+                                                {formatCurrency(currentPnlDollar)}
                                                 <span className="text-sm ml-2 opacity-70">
                                                   ({currentPnlPct >= 0 ? '+' : ''}{currentPnlPct.toFixed(2)}%)
                                                 </span>
                                               </div>
                                               {isClosed && (
-                                                <span className={`text-xs px-2 py-1 rounded-full ${
+                                                <span className={`text-xs px-2 py-1 rounded-full flex items-center gap-1 ${
                                                   signal.result === 'win'
                                                     ? 'bg-accent-green/20 text-accent-green'
                                                     : 'bg-accent-red/20 text-accent-red'
                                                 }`}>
-                                                  {signal.result === 'win' ? 'WIN' : 'LOSS'}
+                                                  {signal.result === 'win' ? <><CheckCircle2 size={12} /> WIN</> : <><XCircle size={12} /> LOSS</>}
                                                 </span>
                                               )}
                                             </div>
@@ -926,18 +956,15 @@ Configuración:
 
                                                   return (
                                                     <div className="h-2 bg-quant-bg rounded-full relative">
-                                                      {/* Entry marker */}
                                                       <div
                                                         className="absolute top-0 bottom-0 w-0.5 bg-white z-10"
                                                         style={{ left: `${entryPos}%` }}
                                                       />
-                                                      {/* Progress fill */}
                                                       <motion.div
                                                         initial={{ width: 0 }}
                                                         animate={{ width: `${progress}%` }}
                                                         className={`h-full rounded-full ${isProfitBar ? 'bg-accent-green' : 'bg-accent-red'}`}
                                                       />
-                                                      {/* TP/SL labels */}
                                                       <div className="absolute -bottom-4 left-0 text-[9px] text-accent-red font-mono">SL</div>
                                                       <div className="absolute -bottom-4 right-0 text-[9px] text-accent-green font-mono">TP</div>
                                                     </div>
@@ -956,6 +983,11 @@ Configuración:
                                                   Now {price.toFixed(2)}
                                                 </span>
                                               )}
+                                              {isClosed && signal.exitPrice && (
+                                                <span className="text-xs px-2 py-1 rounded-lg bg-gray-500/10 text-gray-400 font-mono">
+                                                  Exit {parseFloat(signal.exitPrice).toFixed(2)}
+                                                </span>
+                                              )}
                                               <span className="text-xs px-2 py-1 rounded-lg bg-accent-green/10 text-accent-green font-mono">
                                                 TP {tp.toFixed(2)}
                                               </span>
@@ -970,14 +1002,14 @@ Configuración:
                                                 <div>
                                                   <div className="text-[10px] text-gray-500 mb-0.5">si gana</div>
                                                   <div className="text-accent-green font-bold font-mono">
-                                                    +${potentialProfit.toFixed(0)}
+                                                    {formatCurrency(potentialProfit)}
                                                     <span className="text-xs opacity-70 ml-1">(+{(tpMovePct * lev).toFixed(0)}%)</span>
                                                   </div>
                                                 </div>
                                                 <div className="text-right">
                                                   <div className="text-[10px] text-gray-500 mb-0.5">si pierde</div>
                                                   <div className="text-accent-red font-bold font-mono">
-                                                    -${potentialLoss.toFixed(0)}
+                                                    {formatCurrency(-potentialLoss)}
                                                     <span className="text-xs opacity-70 ml-1">(-{(slMovePct * lev).toFixed(0)}%)</span>
                                                   </div>
                                                 </div>
@@ -986,7 +1018,7 @@ Configuración:
 
                                             {/* Capital info */}
                                             <div className="text-[10px] text-gray-500 text-center mt-2">
-                                              ${cap.toFixed(0)} × {lev}x leverage
+                                              {formatCurrency(cap).replace('+', '')} × {lev}x leverage
                                             </div>
                                           </div>
                                         </motion.div>
@@ -994,8 +1026,52 @@ Configuración:
                                     </AnimatePresence>
                                   </div>
                                 )
-                              })}
-                            </div>
+                              }
+
+                              return (
+                                <div className="space-y-3">
+                                  {/* ACTIVE TRADES SECTION */}
+                                  {activeTrades.length > 0 && (
+                                    <div>
+                                      <div className="flex items-center gap-2 mb-2">
+                                        <span className="relative flex h-2.5 w-2.5">
+                                          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-accent-green opacity-75"></span>
+                                          <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-accent-green"></span>
+                                        </span>
+                                        <span className="text-[10px] text-accent-green uppercase tracking-wider font-medium">
+                                          Activos ({activeTrades.length})
+                                        </span>
+                                      </div>
+                                      <div className="rounded-xl overflow-hidden border border-accent-cyan/30 bg-accent-cyan/5">
+                                        {activeTrades.map((signal, idx) => renderTradeRow(signal, idx, idx === 0))}
+                                      </div>
+                                    </div>
+                                  )}
+
+                                  {/* CLOSED TRADES SECTION */}
+                                  {closedTrades.length > 0 && (
+                                    <div>
+                                      <div className="flex items-center gap-2 mb-2">
+                                        <span className="inline-flex h-2.5 w-2.5 rounded-full bg-gray-500"></span>
+                                        <span className="text-[10px] text-gray-500 uppercase tracking-wider font-medium">
+                                          Cerrados ({closedTrades.length})
+                                        </span>
+                                      </div>
+                                      <div className="rounded-xl overflow-hidden border border-quant-border">
+                                        {closedTrades.map((signal, idx) => renderTradeRow(signal, idx, idx === 0))}
+                                      </div>
+                                    </div>
+                                  )}
+
+                                  {/* Empty state */}
+                                  {eggSignals.length === 0 && (
+                                    <div className="text-center text-gray-500 py-8">
+                                      No hay trades en este egg
+                                    </div>
+                                  )}
+                                </div>
+                              )
+                            })()}
                           </div>
                           )}
 
