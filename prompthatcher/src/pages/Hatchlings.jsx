@@ -6,22 +6,33 @@ import useStore from '../store/useStore'
 import Header from '../components/Header'
 import EggIcon from '../components/EggIcon'
 
+// Safe number formatting
+const safeToFixed = (num, digits = 1) => {
+  if (num === null || num === undefined || isNaN(num)) return '0'
+  return Number(num).toFixed(digits)
+}
+
 export default function Hatchlings() {
   const navigate = useNavigate()
-  const store = useStore()
-  const eggs = store?.eggs || []
-  const signals = store?.signals || []
-  const prices = store?.prices || {}
-  const prompts = store?.prompts || []
+
+  // Get store data with safe defaults
+  const eggs = useStore((state) => state.eggs) || []
+  const signals = useStore((state) => state.signals) || []
+  const prices = useStore((state) => state.prices) || {}
+  const prompts = useStore((state) => state.prompts) || []
 
   const [expandedPrompt, setExpandedPrompt] = useState(null)
-  const [sortBy, setSortBy] = useState('pnl') // 'pnl', 'winRate', 'eggs', 'trades'
-  const [filterBy, setFilterBy] = useState('all') // 'all', 'profitable', 'unprofitable'
+  const [sortBy, setSortBy] = useState('pnl')
+  const [filterBy, setFilterBy] = useState('all')
 
   // Check if egg is expired
   const isEggExpired = (egg) => {
-    if (!egg?.expiresAt) return false
-    return new Date(egg.expiresAt) <= new Date()
+    if (!egg || !egg.expiresAt) return false
+    try {
+      return new Date(egg.expiresAt) <= new Date()
+    } catch {
+      return false
+    }
   }
 
   // Check if egg is completed (hatched or expired)
@@ -35,13 +46,14 @@ export default function Hatchlings() {
     if (!signal) return 0
     try {
       if (signal.status === 'closed' && signal.pnl !== undefined) {
-        return signal.pnl
+        return Number(signal.pnl) || 0
       }
       if (signal.unrealizedPnl !== undefined) {
-        return signal.unrealizedPnl
+        return Number(signal.unrealizedPnl) || 0
       }
-      const currentPrice = prices?.[signal.asset]?.price
-      if (!currentPrice) return 0
+      const priceData = prices[signal.asset]
+      if (!priceData || !priceData.price) return 0
+      const currentPrice = priceData.price
       const entry = parseFloat(signal.entry)
       if (isNaN(entry) || entry === 0) return 0
       if (signal.strategy === 'LONG') {
@@ -58,20 +70,20 @@ export default function Hatchlings() {
   // Calculate egg results
   const calculateEggResults = (egg) => {
     const defaultResult = { totalPnl: 0, winRate: 0, totalTrades: 0, wins: 0, losses: 0 }
+    if (!egg) return defaultResult
     try {
-      if (!egg?.trades || !Array.isArray(egg.trades)) {
+      const eggTrades = egg.trades
+      if (!eggTrades || !Array.isArray(eggTrades) || eggTrades.length === 0) {
         return defaultResult
       }
-      if (!Array.isArray(signals)) {
-        return defaultResult
-      }
-      const eggSignals = signals.filter(s => s && egg.trades.includes(s.id))
+      const eggSignals = signals.filter(s => s && eggTrades.includes(s.id))
       if (eggSignals.length === 0) {
         return defaultResult
       }
 
       const pnlValues = eggSignals.map(s => getSignalPnl(s))
-      const avgPnl = pnlValues.reduce((sum, p) => sum + (p || 0), 0) / pnlValues.length
+      const totalPnl = pnlValues.reduce((sum, p) => sum + (p || 0), 0)
+      const avgPnl = totalPnl / pnlValues.length
       const wins = pnlValues.filter(p => p > 0).length
       const losses = pnlValues.filter(p => p < 0).length
 
@@ -91,95 +103,96 @@ export default function Hatchlings() {
   // Aggregate data by prompt
   const promptStats = useMemo(() => {
     try {
-      // Safeguard: ensure eggs is an array
-      if (!Array.isArray(eggs)) return []
+      if (!Array.isArray(eggs) || eggs.length === 0) return []
 
       // Get all completed eggs
-      const completedEggs = eggs.filter(isEggCompleted)
+      const completedEggs = eggs.filter(egg => egg && isEggCompleted(egg))
+      if (completedEggs.length === 0) return []
 
-    // Group eggs by promptId or promptName
-    const promptGroups = {}
+      // Group eggs by promptId or promptName
+      const promptGroups = {}
 
-    completedEggs.forEach(egg => {
-      if (!egg) return
+      for (const egg of completedEggs) {
+        if (!egg) continue
 
-      const promptKey = egg.promptId || egg.promptName || 'Unknown'
-      const promptName = egg.promptName || 'Unknown Strategy'
+        const promptKey = egg.promptId || egg.promptName || 'Unknown'
+        const promptName = egg.promptName || 'Unknown Strategy'
 
-      if (!promptGroups[promptKey]) {
-        // Try to find the prompt in the prompts list (safely)
-        const promptData = Array.isArray(prompts)
-          ? prompts.find(p => p?.id === egg.promptId || p?.name === egg.promptName)
-          : null
+        if (!promptGroups[promptKey]) {
+          // Try to find the prompt in the prompts list
+          let promptData = null
+          if (Array.isArray(prompts)) {
+            promptData = prompts.find(p => p && (p.id === egg.promptId || p.name === egg.promptName))
+          }
 
-        promptGroups[promptKey] = {
-          id: promptKey,
-          name: promptName,
-          content: promptData?.content || egg.promptContent || '',
-          eggs: [],
-          totalPnl: 0,
-          totalTrades: 0,
-          totalWins: 0,
-          totalLosses: 0
+          promptGroups[promptKey] = {
+            id: promptKey,
+            name: promptName,
+            content: promptData?.content || egg.promptContent || '',
+            eggs: [],
+            totalPnl: 0,
+            totalTrades: 0,
+            totalWins: 0,
+            totalLosses: 0
+          }
         }
+
+        const results = egg.results || calculateEggResults(egg)
+        const eggData = {
+          ...egg,
+          results: results || { totalPnl: 0, winRate: 0, totalTrades: 0, wins: 0, losses: 0 },
+          isExpired: isEggExpired(egg)
+        }
+
+        promptGroups[promptKey].eggs.push(eggData)
+        promptGroups[promptKey].totalTrades += (results?.totalTrades || 0)
+        promptGroups[promptKey].totalWins += (results?.wins || 0)
+        promptGroups[promptKey].totalLosses += (results?.losses || 0)
       }
 
-      const results = egg.results || calculateEggResults(egg)
-      const eggData = {
-        ...egg,
-        results,
-        isExpired: isEggExpired(egg)
+      // Calculate aggregate stats for each prompt
+      for (const group of Object.values(promptGroups)) {
+        if (group.eggs.length > 0) {
+          const totalPnl = group.eggs.reduce((sum, e) => sum + (e.results?.totalPnl || 0), 0)
+          group.totalPnl = totalPnl / group.eggs.length
+        }
+        group.winRate = group.totalTrades > 0
+          ? Math.round((group.totalWins / group.totalTrades) * 100)
+          : 0
+        group.eggWinRate = group.eggs.length > 0
+          ? Math.round((group.eggs.filter(e => (e.results?.totalPnl || 0) >= 0).length / group.eggs.length) * 100)
+          : 0
+
+        // Sort eggs by PnL within each prompt
+        group.eggs.sort((a, b) => (b.results?.totalPnl || 0) - (a.results?.totalPnl || 0))
       }
 
-      promptGroups[promptKey].eggs.push(eggData)
-      promptGroups[promptKey].totalTrades += results?.totalTrades || 0
-      promptGroups[promptKey].totalWins += results?.wins || 0
-      promptGroups[promptKey].totalLosses += results?.losses || 0
-    })
+      // Convert to array and apply filters
+      let result = Object.values(promptGroups)
 
-    // Calculate aggregate stats for each prompt
-    Object.values(promptGroups).forEach(group => {
-      // Calculate average PnL across all eggs
-      if (group.eggs.length > 0) {
-        group.totalPnl = group.eggs.reduce((sum, e) => sum + (e.results?.totalPnl || 0), 0) / group.eggs.length
+      // Apply filter
+      if (filterBy === 'profitable') {
+        result = result.filter(p => (p.totalPnl || 0) >= 0)
+      } else if (filterBy === 'unprofitable') {
+        result = result.filter(p => (p.totalPnl || 0) < 0)
       }
-      group.winRate = group.totalTrades > 0
-        ? Math.round((group.totalWins / group.totalTrades) * 100)
-        : 0
-      group.eggWinRate = group.eggs.length > 0
-        ? Math.round((group.eggs.filter(e => (e.results?.totalPnl || 0) >= 0).length / group.eggs.length) * 100)
-        : 0
 
-      // Sort eggs by PnL within each prompt
-      group.eggs.sort((a, b) => (b.results?.totalPnl || 0) - (a.results?.totalPnl || 0))
-    })
+      // Apply sort
+      result.sort((a, b) => {
+        switch (sortBy) {
+          case 'winRate':
+            return (b.winRate || 0) - (a.winRate || 0)
+          case 'eggs':
+            return (b.eggs?.length || 0) - (a.eggs?.length || 0)
+          case 'trades':
+            return (b.totalTrades || 0) - (a.totalTrades || 0)
+          case 'pnl':
+          default:
+            return (b.totalPnl || 0) - (a.totalPnl || 0)
+        }
+      })
 
-    // Convert to array and apply filters
-    let result = Object.values(promptGroups)
-
-    // Apply filter
-    if (filterBy === 'profitable') {
-      result = result.filter(p => p.totalPnl >= 0)
-    } else if (filterBy === 'unprofitable') {
-      result = result.filter(p => p.totalPnl < 0)
-    }
-
-    // Apply sort
-    result.sort((a, b) => {
-      switch (sortBy) {
-        case 'winRate':
-          return b.winRate - a.winRate
-        case 'eggs':
-          return b.eggs.length - a.eggs.length
-        case 'trades':
-          return b.totalTrades - a.totalTrades
-        case 'pnl':
-        default:
-          return b.totalPnl - a.totalPnl
-      }
-    })
-
-    return result
+      return result
     } catch (error) {
       console.error('Error calculating prompt stats:', error)
       return []
@@ -188,12 +201,13 @@ export default function Hatchlings() {
 
   // Global stats
   const globalStats = useMemo(() => {
+    const defaultStats = { totalPrompts: 0, totalEggs: 0, totalTrades: 0, avgPnl: 0, avgWinRate: 0, profitablePrompts: 0 }
     try {
       if (!Array.isArray(promptStats) || promptStats.length === 0) {
-        return { totalPrompts: 0, totalEggs: 0, totalTrades: 0, avgPnl: 0, avgWinRate: 0, profitablePrompts: 0 }
+        return defaultStats
       }
 
-      const allPnl = promptStats.reduce((sum, p) => sum + (p?.totalPnl || 0) * (p?.eggs?.length || 0), 0)
+      const allPnl = promptStats.reduce((sum, p) => sum + ((p?.totalPnl || 0) * (p?.eggs?.length || 0)), 0)
       const totalEggs = promptStats.reduce((sum, p) => sum + (p?.eggs?.length || 0), 0)
       const avgPnl = totalEggs > 0 ? allPnl / totalEggs : 0
 
@@ -213,7 +227,7 @@ export default function Hatchlings() {
       }
     } catch (error) {
       console.error('Error calculating global stats:', error)
-      return { totalPrompts: 0, totalEggs: 0, totalTrades: 0, avgPnl: 0, avgWinRate: 0, profitablePrompts: 0 }
+      return defaultStats
     }
   }, [promptStats])
 
@@ -232,7 +246,11 @@ export default function Hatchlings() {
 
   const formatDate = (dateString) => {
     if (!dateString) return '-'
-    return new Date(dateString).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+    try {
+      return new Date(dateString).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+    } catch {
+      return '-'
+    }
   }
 
   return (
@@ -268,7 +286,7 @@ export default function Hatchlings() {
             <span className={`text-2xl font-bold font-mono ${
               globalStats.avgPnl >= 0 ? 'text-accent-green' : 'text-accent-red'
             }`}>
-              {globalStats.avgPnl >= 0 ? '+' : ''}{globalStats.avgPnl.toFixed(1)}%
+              {globalStats.avgPnl >= 0 ? '+' : ''}{safeToFixed(globalStats.avgPnl)}%
             </span>
           </motion.div>
 
@@ -406,13 +424,14 @@ export default function Hatchlings() {
           ) : (
             <AnimatePresence mode="popLayout">
               {promptStats.map((prompt, index) => {
-                const isWinner = prompt.totalPnl >= 0
+                if (!prompt) return null
+                const isWinner = (prompt.totalPnl || 0) >= 0
                 const rank = index + 1
                 const isExpanded = expandedPrompt === prompt.id
 
                 return (
                   <motion.div
-                    key={prompt.id}
+                    key={prompt.id || index}
                     layout
                     initial={{ opacity: 0, x: -20 }}
                     animate={{ opacity: 1, x: 0 }}
@@ -440,10 +459,10 @@ export default function Hatchlings() {
                         {/* Content */}
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center justify-between mb-1">
-                            <h3 className="font-semibold text-white truncate">{prompt.name}</h3>
+                            <h3 className="font-semibold text-white truncate">{prompt.name || 'Unknown'}</h3>
                             <div className="flex items-center gap-2">
                               <span className="text-xs text-gray-500 bg-quant-surface px-2 py-0.5 rounded-full">
-                                {prompt.eggs.length} eggs
+                                {prompt.eggs?.length || 0} eggs
                               </span>
                               {isExpanded ? (
                                 <ChevronUp size={16} className="text-gray-500" />
@@ -460,29 +479,29 @@ export default function Hatchlings() {
                               <span className={`block font-mono text-sm font-bold ${
                                 isWinner ? 'text-accent-green' : 'text-accent-red'
                               }`}>
-                                {isWinner ? '+' : ''}{prompt.totalPnl.toFixed(1)}%
+                                {isWinner ? '+' : ''}{safeToFixed(prompt.totalPnl)}%
                               </span>
                             </div>
                             <div>
                               <span className="text-[10px] text-gray-500 uppercase">Win Rate</span>
                               <span className={`block font-mono text-sm ${
-                                prompt.winRate >= 50 ? 'text-accent-green' : 'text-accent-red'
+                                (prompt.winRate || 0) >= 50 ? 'text-accent-green' : 'text-accent-red'
                               }`}>
-                                {prompt.winRate}%
+                                {prompt.winRate || 0}%
                               </span>
                             </div>
                             <div>
                               <span className="text-[10px] text-gray-500 uppercase">Trades</span>
                               <span className="block font-mono text-sm text-white">
-                                {prompt.totalTrades}
+                                {prompt.totalTrades || 0}
                               </span>
                             </div>
                             <div>
                               <span className="text-[10px] text-gray-500 uppercase">W/L</span>
                               <span className="block font-mono text-sm">
-                                <span className="text-accent-green">{prompt.totalWins}</span>
+                                <span className="text-accent-green">{prompt.totalWins || 0}</span>
                                 <span className="text-gray-500">/</span>
-                                <span className="text-accent-red">{prompt.totalLosses}</span>
+                                <span className="text-accent-red">{prompt.totalLosses || 0}</span>
                               </span>
                             </div>
                           </div>
@@ -511,22 +530,23 @@ export default function Hatchlings() {
                             {/* Eggs Header */}
                             <div className="flex items-center justify-between">
                               <span className="text-xs text-gray-500 uppercase tracking-wider">
-                                Eggs sorted by PnL ({prompt.eggs.length})
+                                Eggs sorted by PnL ({prompt.eggs?.length || 0})
                               </span>
                               <span className="text-xs text-gray-500">
-                                {prompt.eggs.filter(e => (e.results?.totalPnl || 0) >= 0).length} profitable
+                                {(prompt.eggs || []).filter(e => (e?.results?.totalPnl || 0) >= 0).length} profitable
                               </span>
                             </div>
 
                             {/* Eggs List */}
                             <div className="space-y-2">
-                              {prompt.eggs.map((egg, eggIndex) => {
+                              {(prompt.eggs || []).map((egg, eggIndex) => {
+                                if (!egg) return null
                                 const eggPnl = egg.results?.totalPnl || 0
                                 const eggIsWinner = eggPnl >= 0
 
                                 return (
                                   <div
-                                    key={egg.id}
+                                    key={egg.id || eggIndex}
                                     className={`bg-quant-card rounded-xl p-3 border transition-all ${
                                       egg.isExpired
                                         ? 'border-accent-orange/20'
@@ -578,7 +598,7 @@ export default function Hatchlings() {
                                         <span className={`font-mono font-bold ${
                                           eggIsWinner ? 'text-accent-green' : 'text-accent-red'
                                         }`}>
-                                          {eggIsWinner ? '+' : ''}{eggPnl.toFixed(1)}%
+                                          {eggIsWinner ? '+' : ''}{safeToFixed(eggPnl)}%
                                         </span>
                                       </div>
 
