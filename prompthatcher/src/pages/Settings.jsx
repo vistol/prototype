@@ -598,20 +598,9 @@ export default function Settings() {
                       </p>
 
                       <div className="flex items-center justify-between mt-3 pt-3 border-t border-quant-border">
-                        <div className="flex items-center gap-2">
-                          <span className={`text-xs px-2 py-0.5 rounded-full ${
-                            prompt.mode === 'auto'
-                              ? 'bg-accent-cyan/20 text-accent-cyan'
-                              : 'bg-accent-orange/20 text-accent-orange'
-                          }`}>
-                            {prompt.mode?.toUpperCase() || 'AUTO'}
-                          </span>
-                          {prompt.leverage && (
-                            <span className="text-xs text-gray-500">
-                              {prompt.leverage}x
-                            </span>
-                          )}
-                        </div>
+                        <span className="text-xs text-gray-500">
+                          {prompt.content ? `${prompt.content.length} chars` : 'No description'}
+                        </span>
                         <span className="text-xs text-gray-500">
                           {prompt.updatedAt ? new Date(prompt.updatedAt).toLocaleDateString() : '-'}
                         </span>

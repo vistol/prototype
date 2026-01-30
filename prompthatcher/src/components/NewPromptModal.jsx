@@ -1,17 +1,18 @@
 import { useState, useMemo, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { X, PenTool, Clock, DollarSign, TrendingUp, Cpu, Target, Hash, ArrowRight, BookOpen, AlertTriangle, Zap, AlertCircle, Check } from 'lucide-react'
+import { X, PenTool, Clock, DollarSign, Cpu, Target, Hash, ArrowRight, ArrowLeft, BookOpen, AlertTriangle, Zap, AlertCircle, Check, Sparkles, FileText } from 'lucide-react'
 import useStore from '../store/useStore'
 import TradeSelectionModal from './TradeSelectionModal'
 
+// Execution time options
 const executionTimes = [
-  { id: 'target', label: 'Target', desc: 'Until TP/SL' },
-  { id: 'scalping', label: 'Scalp', desc: '15m-1h' },
-  { id: 'intraday', label: 'Intraday', desc: '4-24h' },
-  { id: 'swing', label: 'Swing', desc: '2-7d' },
+  { id: 'target', label: 'Target', desc: 'Until TP/SL', icon: '🎯' },
+  { id: 'scalping', label: 'Scalp', desc: '15m-1h', icon: '⚡' },
+  { id: 'intraday', label: 'Intraday', desc: '4-24h', icon: '☀️' },
+  { id: 'swing', label: 'Swing', desc: '2-7d', icon: '🌊' },
 ]
 
-// AI Providers config - must match settings
+// AI Providers config
 const AI_PROVIDERS = [
   { id: 'anthropic', label: 'Claude', icon: '🧠' },
   { id: 'google', label: 'Gemini', icon: '🔮' },
@@ -28,18 +29,12 @@ const targetPresets = [
   { pct: 100, label: '2x' },
 ]
 
-// Calculate estimated time and risk based on leverage and target
+// Calculate estimated time and risk
 const calculateEstimate = (targetPct, leverage) => {
-  // Crypto average daily volatility ~3-4%
   const dailyVolatility = 3.5
-
-  // Effective movement needed (leverage amplifies returns)
   const effectiveMovement = targetPct / leverage
-
-  // Estimated days to reach target
   const estimatedDays = effectiveMovement / dailyVolatility
 
-  // Risk level based on leverage
   let risk = 'low'
   let riskColor = 'text-accent-green'
   if (leverage >= 20) {
@@ -53,9 +48,8 @@ const calculateEstimate = (targetPct, leverage) => {
     riskColor = 'text-accent-yellow'
   }
 
-  // Format time
   let timeStr = ''
-  if (estimatedDays < 0.04) { // < 1 hour
+  if (estimatedDays < 0.04) {
     timeStr = `~${Math.round(estimatedDays * 24 * 60)}min`
   } else if (estimatedDays < 1) {
     timeStr = `~${Math.round(estimatedDays * 24)}h`
@@ -65,13 +59,11 @@ const calculateEstimate = (targetPct, leverage) => {
     timeStr = `~${Math.round(estimatedDays / 7)}w`
   }
 
-  // Liquidation risk (simplified: if price moves opposite by 100%/leverage, you're liquidated)
   const liquidationMove = (100 / leverage).toFixed(1)
-
   return { timeStr, risk, riskColor, liquidationMove, estimatedDays }
 }
 
-// Loading messages for trade generation - egg themed!
+// Loading messages
 const LOADING_MESSAGES = [
   { text: 'Warming up the incubator...', icon: '🔥' },
   { text: 'Analyzing market DNA...', icon: '🧬' },
@@ -86,31 +78,42 @@ const LOADING_MESSAGES = [
 ]
 
 export default function NewPromptModal() {
-  const { setNewPromptModalOpen, addPrompt, generateTrades, prompts, settings, isGeneratingTrades } = useStore()
+  const { setNewPromptModalOpen, generateTrades, prompts, settings, isGeneratingTrades } = useStore()
+
+  // Steps: 'strategy' -> 'config' -> 'selection'
+  const [step, setStep] = useState('strategy')
+
+  // Strategy selection
   const [mode, setMode] = useState('library') // 'library' or 'manual'
-  const [name, setName] = useState('')
-  const [content, setContent] = useState('')
+  const [selectedPromptId, setSelectedPromptId] = useState(null)
+  const [manualName, setManualName] = useState('')
+  const [manualContent, setManualContent] = useState('')
+
+  // Execution config (step 2)
   const [executionTime, setExecutionTime] = useState('target')
   const [capital, setCapital] = useState(1000)
   const [leverage, setLeverage] = useState(5)
+  const [targetPct, setTargetPct] = useState(10)
   const [minIpe, setMinIpe] = useState(80)
   const [numResults, setNumResults] = useState(3)
-  const [targetPct, setTargetPct] = useState(10) // Target profit percentage
-  const [loadingMsgIndex, setLoadingMsgIndex] = useState(0)
 
-  // Cycle through loading messages while generating
+  // Loading state
+  const [loadingMsgIndex, setLoadingMsgIndex] = useState(0)
+  const [currentPrompt, setCurrentPrompt] = useState(null)
+
+  // Cycle loading messages
   useEffect(() => {
     if (isGeneratingTrades) {
       const interval = setInterval(() => {
         setLoadingMsgIndex(prev => (prev + 1) % LOADING_MESSAGES.length)
-      }, 2000) // Change message every 2 seconds
+      }, 2000)
       return () => clearInterval(interval)
     } else {
       setLoadingMsgIndex(0)
     }
   }, [isGeneratingTrades])
 
-  // Get configured AI providers (those with API keys)
+  // Get configured AI providers
   const configuredProviders = useMemo(() => {
     return AI_PROVIDERS.filter(provider => {
       const apiKey = settings?.apiKeys?.[provider.id]
@@ -118,35 +121,34 @@ export default function NewPromptModal() {
     })
   }, [settings?.apiKeys])
 
-  // Default to first configured provider, or 'google' if none
+  // Default AI provider
   const [aiProvider, setAiProvider] = useState(() => {
-    // First check if current settings provider has a key
     if (settings?.apiKeys?.[settings?.aiProvider]) {
       return settings.aiProvider
     }
-    // Otherwise use first configured provider
     const firstConfigured = AI_PROVIDERS.find(p => settings?.apiKeys?.[p.id])
     return firstConfigured?.id || 'google'
   })
 
-  // Selected prompt from library
-  const [selectedPromptId, setSelectedPromptId] = useState(null)
-
-  // Step management: 'config' -> 'selection'
-  const [step, setStep] = useState('config')
-  const [currentPrompt, setCurrentPrompt] = useState(null)
-
-  // Get all prompts for library - use useMemo to ensure reactivity
-  const savedPrompts = useMemo(() => {
-    // Return all prompts from the store, same as Settings page
-    console.log('[NewPromptModal] Prompts from store:', prompts.length, prompts.map(p => p.name))
-    return [...prompts] // Spread to create new array reference
-  }, [prompts])
-
-  // Check if any provider is configured
   const hasConfiguredProvider = configuredProviders.length > 0
 
-  // Calculate estimate when in target mode
+  // Get saved prompts
+  const savedPrompts = useMemo(() => {
+    return [...prompts]
+  }, [prompts])
+
+  // Selected strategy info
+  const selectedStrategy = useMemo(() => {
+    if (mode === 'library' && selectedPromptId) {
+      return prompts.find(p => p.id === selectedPromptId)
+    }
+    if (mode === 'manual' && manualName.trim()) {
+      return { name: manualName.trim(), content: manualContent.trim() || manualName.trim() }
+    }
+    return null
+  }, [mode, selectedPromptId, manualName, manualContent, prompts])
+
+  // Estimate for target mode
   const estimate = useMemo(() => {
     if (executionTime === 'target') {
       return calculateEstimate(targetPct, leverage)
@@ -154,88 +156,37 @@ export default function NewPromptModal() {
     return null
   }, [targetPct, leverage, executionTime])
 
+  // Can proceed to next step
+  const canProceedToConfig = selectedStrategy !== null
+  const canExecute = hasConfiguredProvider && selectedStrategy !== null
+
+  // Handle strategy selection
   const handleSelectPrompt = (prompt) => {
     setSelectedPromptId(prompt.id)
-    setName(prompt.name)
-    setContent(prompt.content || '')
-    setExecutionTime(prompt.executionTime || 'target')
-    setCapital(prompt.capital || 1000)
-    setLeverage(prompt.leverage || 5)
-
-    // Map old aiModel values to new provider IDs
-    const providerMap = { 'gemini': 'google', 'openai': 'openai', 'grok': 'xai' }
-    const mappedProvider = providerMap[prompt.aiModel] || prompt.aiModel || 'google'
-
-    // Check if the mapped provider has an API key configured
-    // If not, use the first configured provider instead
-    const hasKeyForMapped = settings?.apiKeys?.[mappedProvider]?.length > 0
-    if (hasKeyForMapped) {
-      setAiProvider(mappedProvider)
-    } else {
-      // Find first provider with a configured API key
-      const firstConfigured = AI_PROVIDERS.find(p => settings?.apiKeys?.[p.id]?.length > 0)
-      setAiProvider(firstConfigured?.id || mappedProvider)
-    }
-
-    setMinIpe(prompt.minIpe || 80)
-    setNumResults(prompt.numResults || 3)
-    setTargetPct(prompt.targetPct || 10)
   }
 
-  const handleSubmit = async () => {
-    if (!hasConfiguredProvider) return
+  // Go to config step
+  const handleProceedToConfig = () => {
+    if (canProceedToConfig) {
+      setStep('config')
+    }
+  }
 
-    // Debug: log current aiProvider state
-    console.log('[handleSubmit] aiProvider state:', aiProvider)
-    console.log('[handleSubmit] settings.apiKeys:', Object.keys(settings?.apiKeys || {}).filter(k => settings?.apiKeys?.[k]))
+  // Execute and generate trades
+  const handleExecute = async () => {
+    if (!canExecute) return
 
-    let promptToUse = null
-
-    if (mode === 'library') {
-      const selectedPrompt = prompts.find(p => p.id === selectedPromptId)
-      if (!selectedPrompt) return
-
-      console.log('[handleSubmit] selectedPrompt.aiModel:', selectedPrompt.aiModel)
-      console.log('[handleSubmit] Using aiProvider:', aiProvider)
-
-      // Ensure content is preserved from the library prompt
-      promptToUse = {
-        ...selectedPrompt,
-        content: selectedPrompt.content || selectedPrompt.name, // Fallback to name if no content
-        executionTime,
-        capital,
-        leverage,
-        aiModel: aiProvider,  // Override with currently selected provider
-        minIpe,
-        numResults,
-        targetPct: executionTime === 'target' ? targetPct : null
-      }
-
-      console.log('[handleSubmit] promptToUse.aiModel:', promptToUse.aiModel)
-    } else {
-      // Manual mode
-      if (!name.trim()) return
-
-      const promptContent = content || name.trim()
-
-      promptToUse = {
-        id: `prompt-${Date.now()}`,
-        name: name.trim(),
-        content: promptContent,
-        mode: 'manual',
-        executionTime,
-        capital,
-        leverage,
-        aiModel: aiProvider,
-        minIpe,
-        numResults,
-        targetPct: executionTime === 'target' ? targetPct : null,
-        status: 'active',
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString()
-      }
-
-      addPrompt(promptToUse)
+    const promptToUse = {
+      id: selectedStrategy.id || `prompt-${Date.now()}`,
+      name: selectedStrategy.name,
+      content: selectedStrategy.content,
+      executionTime,
+      capital,
+      leverage,
+      aiModel: aiProvider,
+      minIpe,
+      numResults,
+      targetPct: executionTime === 'target' ? targetPct : null
     }
 
     setCurrentPrompt(promptToUse)
@@ -243,26 +194,24 @@ export default function NewPromptModal() {
     setStep('selection')
   }
 
-  const handleTradeSelectionComplete = () => {
+  // Navigation
+  const handleBack = () => {
+    if (step === 'config') {
+      setStep('strategy')
+    }
+  }
+
+  const handleClose = () => {
     setNewPromptModalOpen(false)
   }
 
-  const handleTradeSelectionCancel = () => {
-    setStep('config')
-  }
-
-  const canSubmit = () => {
-    if (!hasConfiguredProvider) return false
-    if (mode === 'library') return selectedPromptId !== null
-    return name.trim().length > 0
-  }
-
+  // Trade selection complete
   if (step === 'selection' && currentPrompt) {
     return (
       <TradeSelectionModal
         prompt={currentPrompt}
-        onClose={handleTradeSelectionCancel}
-        onComplete={handleTradeSelectionComplete}
+        onClose={() => setStep('config')}
+        onComplete={handleClose}
       />
     )
   }
@@ -273,406 +222,478 @@ export default function NewPromptModal() {
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
       className="fixed inset-0 z-50 flex items-end justify-center bg-black/60 backdrop-blur-sm"
-      onClick={() => setNewPromptModalOpen(false)}
+      onClick={handleClose}
     >
       <motion.div
         initial={{ y: '100%' }}
         animate={{ y: 0 }}
         exit={{ y: '100%' }}
         transition={{ type: 'spring', damping: 25, stiffness: 300 }}
-        className="w-full max-w-lg bg-quant-card rounded-t-3xl max-h-[85vh] flex flex-col"
+        className="w-full max-w-lg bg-quant-card rounded-t-3xl max-h-[90vh] flex flex-col"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
         <div className="shrink-0 px-4 py-3 flex items-center justify-between border-b border-quant-border">
-          <h2 className="text-base font-bold text-white">New Incubation</h2>
+          <div className="flex items-center gap-3">
+            {step === 'config' && (
+              <button
+                onClick={handleBack}
+                className="p-1.5 rounded-full hover:bg-quant-surface transition-colors"
+              >
+                <ArrowLeft size={18} className="text-gray-400" />
+              </button>
+            )}
+            <div>
+              <h2 className="text-base font-bold text-white">
+                {step === 'strategy' ? 'Select Strategy' : 'Configure Execution'}
+              </h2>
+              <p className="text-[10px] text-gray-500">
+                {step === 'strategy' ? 'Step 1 of 2 • Choose what to analyze' : 'Step 2 of 2 • Set execution parameters'}
+              </p>
+            </div>
+          </div>
           <button
-            onClick={() => setNewPromptModalOpen(false)}
+            onClick={handleClose}
             className="p-1.5 rounded-full hover:bg-quant-surface transition-colors"
           >
             <X size={18} className="text-gray-400" />
           </button>
         </div>
 
-        {/* Tab Navigation - Library & Manual only */}
-        <div className="shrink-0 px-4 py-2">
-          <div className="flex bg-quant-surface rounded-lg p-0.5">
-            {[
-              { id: 'library', icon: BookOpen, label: `Library (${savedPrompts.length})` },
-              { id: 'manual', icon: PenTool, label: 'Manual' }
-            ].map(tab => (
-              <button
-                key={tab.id}
-                onClick={() => setMode(tab.id)}
-                className={`flex-1 flex items-center justify-center gap-1.5 py-2 rounded-md transition-all ${
-                  mode === tab.id ? 'bg-quant-card text-accent-cyan' : 'text-gray-500'
-                }`}
-              >
-                <tab.icon size={14} />
-                <span className="text-xs font-medium">{tab.label}</span>
-              </button>
-            ))}
-          </div>
+        {/* Step Progress */}
+        <div className="shrink-0 px-4 py-2 flex gap-2">
+          <div className={`flex-1 h-1 rounded-full transition-colors ${step === 'strategy' ? 'bg-accent-cyan' : 'bg-accent-cyan'}`} />
+          <div className={`flex-1 h-1 rounded-full transition-colors ${step === 'config' ? 'bg-accent-cyan' : 'bg-quant-surface'}`} />
         </div>
 
         {/* Content */}
-        <div className="flex-1 overflow-y-auto hide-scrollbar px-4 py-3 space-y-4">
-
-          {/* LIBRARY MODE - Prompt selector */}
-          {mode === 'library' && (
-            <div className="space-y-2">
-              {savedPrompts.length === 0 ? (
-                <div className="text-center py-6 text-gray-500">
-                  <BookOpen size={24} className="mx-auto mb-2 opacity-50" />
-                  <p className="text-xs">No saved prompts. Create one in Manual mode first.</p>
+        <div className="flex-1 overflow-y-auto hide-scrollbar">
+          <AnimatePresence mode="wait">
+            {/* STEP 1: Strategy Selection */}
+            {step === 'strategy' && (
+              <motion.div
+                key="strategy"
+                initial={{ opacity: 0, x: -20 }}
+                animate={{ opacity: 1, x: 0 }}
+                exit={{ opacity: 0, x: 20 }}
+                className="px-4 py-3 space-y-4"
+              >
+                {/* Mode Toggle */}
+                <div className="flex bg-quant-surface rounded-xl p-1">
+                  <button
+                    onClick={() => setMode('library')}
+                    className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-lg transition-all ${
+                      mode === 'library' ? 'bg-quant-card text-accent-cyan shadow-lg' : 'text-gray-500'
+                    }`}
+                  >
+                    <BookOpen size={16} />
+                    <span className="text-sm font-medium">Library ({savedPrompts.length})</span>
+                  </button>
+                  <button
+                    onClick={() => setMode('manual')}
+                    className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-lg transition-all ${
+                      mode === 'manual' ? 'bg-quant-card text-accent-cyan shadow-lg' : 'text-gray-500'
+                    }`}
+                  >
+                    <PenTool size={16} />
+                    <span className="text-sm font-medium">Write New</span>
+                  </button>
                 </div>
-              ) : (
-                <div className="flex flex-col gap-2">
-                  {/* Debug info */}
-                  <div className="text-[10px] text-gray-600 px-1">
-                    {savedPrompts.length} prompts available
-                  </div>
-                  {/* Render each prompt explicitly */}
-                  {savedPrompts.filter(p => p && p.id).map((prompt, index) => {
-                    const isSelected = selectedPromptId === prompt.id
-                    return (
-                      <button
-                        key={prompt.id}
-                        onClick={() => handleSelectPrompt(prompt)}
-                        style={{ display: 'block', width: '100%' }}
-                        className={`p-3 rounded-xl border text-left transition-all ${
-                          isSelected
-                            ? 'border-accent-cyan bg-accent-cyan/10'
-                            : 'border-quant-border bg-quant-surface'
-                        }`}
-                      >
-                        <div className="flex items-center justify-between mb-1">
-                          <span className={`font-medium text-sm ${
-                            isSelected ? 'text-white' : 'text-gray-300'
-                          }`}>
-                            {prompt.name || `Prompt ${index + 1}`}
-                          </span>
-                          {isSelected && (
-                            <div className="w-2 h-2 rounded-full bg-accent-cyan" />
-                          )}
+
+                {/* Library Mode */}
+                {mode === 'library' && (
+                  <div className="space-y-2">
+                    {savedPrompts.length === 0 ? (
+                      <div className="text-center py-8">
+                        <div className="w-16 h-16 mx-auto mb-3 rounded-2xl bg-quant-surface flex items-center justify-center">
+                          <FileText size={28} className="text-gray-600" />
                         </div>
-                        {prompt.content && (
-                          <p className="text-xs text-gray-500 line-clamp-2">{prompt.content}</p>
-                        )}
-                      </button>
-                    )
-                  })}
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* Common form fields - only show if not library OR library with selection */}
-          {(mode !== 'library' || selectedPromptId) && (
-            <>
-              {/* Name field - only for manual mode */}
-              {mode === 'manual' && (
-                <div>
-                  <label className="text-[10px] text-gray-500 uppercase tracking-wider mb-1 block">Name</label>
-                  <input
-                    type="text"
-                    value={name}
-                    onChange={(e) => setName(e.target.value)}
-                    placeholder="Strategy name..."
-                    className="w-full bg-quant-surface border border-quant-border rounded-lg px-3 py-2 text-sm text-white placeholder-gray-500"
-                  />
-                </div>
-              )}
-
-              {/* Manual content - Strategy description */}
-              {mode === 'manual' && (
-                <div>
-                  <label className="text-[10px] text-gray-500 uppercase tracking-wider mb-1 block">Strategy</label>
-                  <textarea
-                    value={content}
-                    onChange={(e) => setContent(e.target.value)}
-                    placeholder="Describe your trading strategy in detail. The AI will use this to generate trade signals..."
-                    rows={4}
-                    className="w-full bg-quant-surface border border-quant-border rounded-lg px-3 py-2 text-sm text-white placeholder-gray-500 resize-none"
-                  />
-                </div>
-              )}
-
-              {/* Execution Time - Horizontal compact */}
-              <div>
-                <label className="text-[10px] text-gray-500 uppercase tracking-wider mb-1.5 flex items-center gap-1">
-                  <Clock size={10} /> Execution
-                </label>
-                <div className="flex gap-1.5">
-                  {executionTimes.map((time) => (
-                    <button
-                      key={time.id}
-                      onClick={() => setExecutionTime(time.id)}
-                      className={`flex-1 py-2 px-1 rounded-lg border text-center transition-all ${
-                        executionTime === time.id
-                          ? 'border-accent-cyan bg-accent-cyan/10 text-white'
-                          : 'border-quant-border bg-quant-surface text-gray-500'
-                      }`}
-                    >
-                      <span className="block text-xs font-medium">{time.label}</span>
-                      <span className="text-[9px] opacity-60">{time.desc}</span>
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              {/* TARGET MODE - Profit target selector with time estimate */}
-              {executionTime === 'target' && (
-                <div className="bg-quant-surface rounded-xl p-3 border border-quant-border">
-                  <div className="flex items-center justify-between mb-2">
-                    <label className="text-[10px] text-gray-500 uppercase tracking-wider flex items-center gap-1">
-                      <Target size={10} /> Profit Target
-                    </label>
-                    <span className="text-accent-cyan font-mono font-bold text-sm">+{targetPct}%</span>
+                        <p className="text-sm text-gray-400 mb-1">No saved strategies</p>
+                        <p className="text-xs text-gray-600">Write a new one or create strategies in Settings</p>
+                      </div>
+                    ) : (
+                      <div className="space-y-2">
+                        {savedPrompts.map((prompt) => {
+                          const isSelected = selectedPromptId === prompt.id
+                          return (
+                            <button
+                              key={prompt.id}
+                              onClick={() => handleSelectPrompt(prompt)}
+                              className={`w-full p-4 rounded-xl border text-left transition-all ${
+                                isSelected
+                                  ? 'border-accent-cyan bg-accent-cyan/5 shadow-lg shadow-accent-cyan/10'
+                                  : 'border-quant-border bg-quant-surface hover:border-gray-600'
+                              }`}
+                            >
+                              <div className="flex items-start justify-between gap-3">
+                                <div className="flex-1 min-w-0">
+                                  <div className="flex items-center gap-2 mb-1">
+                                    <span className={`font-semibold text-sm ${isSelected ? 'text-white' : 'text-gray-300'}`}>
+                                      {prompt.name}
+                                    </span>
+                                  </div>
+                                  {prompt.content && (
+                                    <p className="text-xs text-gray-500 line-clamp-2">{prompt.content}</p>
+                                  )}
+                                </div>
+                                <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center shrink-0 transition-all ${
+                                  isSelected ? 'border-accent-cyan bg-accent-cyan' : 'border-gray-600'
+                                }`}>
+                                  {isSelected && <Check size={12} className="text-quant-bg" />}
+                                </div>
+                              </div>
+                            </button>
+                          )
+                        })}
+                      </div>
+                    )}
                   </div>
+                )}
 
-                  {/* Target presets */}
-                  <div className="flex gap-1.5 mb-3">
-                    {targetPresets.map((preset) => (
+                {/* Manual Mode */}
+                {mode === 'manual' && (
+                  <div className="space-y-3">
+                    <div>
+                      <label className="text-[10px] text-gray-500 uppercase tracking-wider mb-1.5 block">
+                        Strategy Name
+                      </label>
+                      <input
+                        type="text"
+                        value={manualName}
+                        onChange={(e) => setManualName(e.target.value)}
+                        placeholder="e.g., RSI Oversold Bounce"
+                        className="w-full bg-quant-surface border border-quant-border rounded-xl px-3 py-3 text-sm text-white placeholder-gray-500 focus:border-accent-cyan focus:outline-none"
+                        autoFocus
+                      />
+                    </div>
+                    <div>
+                      <label className="text-[10px] text-gray-500 uppercase tracking-wider mb-1.5 block">
+                        Strategy Description
+                      </label>
+                      <textarea
+                        value={manualContent}
+                        onChange={(e) => setManualContent(e.target.value)}
+                        placeholder="Describe your trading strategy...
+
+Example: Find cryptocurrencies with RSI below 30 on the 4H timeframe, near historical support levels, with increasing volume."
+                        rows={6}
+                        className="w-full bg-quant-surface border border-quant-border rounded-xl px-3 py-3 text-sm text-white placeholder-gray-500 resize-none focus:border-accent-cyan focus:outline-none"
+                      />
+                    </div>
+                  </div>
+                )}
+
+                {/* Selected Strategy Preview */}
+                {selectedStrategy && (
+                  <div className="p-3 bg-accent-cyan/5 border border-accent-cyan/20 rounded-xl">
+                    <div className="flex items-center gap-2 text-accent-cyan text-xs mb-1">
+                      <Sparkles size={12} />
+                      <span className="uppercase tracking-wider font-medium">Selected Strategy</span>
+                    </div>
+                    <p className="text-sm text-white font-medium">{selectedStrategy.name}</p>
+                  </div>
+                )}
+              </motion.div>
+            )}
+
+            {/* STEP 2: Configuration */}
+            {step === 'config' && (
+              <motion.div
+                key="config"
+                initial={{ opacity: 0, x: 20 }}
+                animate={{ opacity: 1, x: 0 }}
+                exit={{ opacity: 0, x: -20 }}
+                className="px-4 py-3 space-y-4"
+              >
+                {/* Strategy Summary */}
+                <div className="p-3 bg-quant-surface rounded-xl border border-quant-border">
+                  <div className="flex items-center gap-2 text-gray-500 text-[10px] uppercase tracking-wider mb-1">
+                    <FileText size={10} />
+                    Strategy
+                  </div>
+                  <p className="text-sm text-white font-medium">{selectedStrategy?.name}</p>
+                  {selectedStrategy?.content && (
+                    <p className="text-xs text-gray-500 mt-1 line-clamp-2">{selectedStrategy.content}</p>
+                  )}
+                </div>
+
+                {/* Execution Time */}
+                <div>
+                  <label className="text-[10px] text-gray-500 uppercase tracking-wider mb-2 flex items-center gap-1">
+                    <Clock size={10} /> Execution Type
+                  </label>
+                  <div className="grid grid-cols-4 gap-2">
+                    {executionTimes.map((time) => (
                       <button
-                        key={preset.pct}
-                        onClick={() => setTargetPct(preset.pct)}
-                        className={`flex-1 py-1.5 rounded-lg text-xs font-mono transition-all ${
-                          targetPct === preset.pct
-                            ? 'bg-accent-cyan/20 text-accent-cyan border border-accent-cyan/30'
-                            : 'bg-quant-card text-gray-400 border border-transparent'
+                        key={time.id}
+                        onClick={() => setExecutionTime(time.id)}
+                        className={`py-3 px-2 rounded-xl border text-center transition-all ${
+                          executionTime === time.id
+                            ? 'border-accent-cyan bg-accent-cyan/10 text-white'
+                            : 'border-quant-border bg-quant-surface text-gray-500 hover:border-gray-600'
                         }`}
                       >
-                        {preset.label}
+                        <span className="block text-lg mb-1">{time.icon}</span>
+                        <span className="block text-xs font-medium">{time.label}</span>
+                        <span className="text-[9px] opacity-60">{time.desc}</span>
                       </button>
                     ))}
                   </div>
+                </div>
 
-                  {/* Slider for fine-tuning */}
+                {/* Target Mode Options */}
+                {executionTime === 'target' && (
+                  <div className="bg-quant-surface rounded-xl p-3 border border-quant-border">
+                    <div className="flex items-center justify-between mb-2">
+                      <label className="text-[10px] text-gray-500 uppercase tracking-wider flex items-center gap-1">
+                        <Target size={10} /> Profit Target
+                      </label>
+                      <span className="text-accent-cyan font-mono font-bold text-sm">+{targetPct}%</span>
+                    </div>
+
+                    <div className="flex gap-1.5 mb-3">
+                      {targetPresets.map((preset) => (
+                        <button
+                          key={preset.pct}
+                          onClick={() => setTargetPct(preset.pct)}
+                          className={`flex-1 py-2 rounded-lg text-xs font-mono transition-all ${
+                            targetPct === preset.pct
+                              ? 'bg-accent-cyan/20 text-accent-cyan border border-accent-cyan/30'
+                              : 'bg-quant-card text-gray-400 border border-transparent hover:border-gray-700'
+                          }`}
+                        >
+                          {preset.label}
+                        </button>
+                      ))}
+                    </div>
+
+                    <input
+                      type="range"
+                      min={1}
+                      max={200}
+                      value={targetPct}
+                      onChange={(e) => setTargetPct(Number(e.target.value))}
+                      className="w-full h-1 mb-3"
+                    />
+
+                    {estimate && (
+                      <div className="grid grid-cols-3 gap-2 text-center">
+                        <div className="bg-quant-card rounded-lg p-2">
+                          <span className="text-[9px] text-gray-500 block">Est. Time</span>
+                          <span className="text-xs font-mono text-white">{estimate.timeStr}</span>
+                        </div>
+                        <div className="bg-quant-card rounded-lg p-2">
+                          <span className="text-[9px] text-gray-500 block">Risk</span>
+                          <span className={`text-xs font-mono capitalize ${estimate.riskColor}`}>
+                            {estimate.risk}
+                          </span>
+                        </div>
+                        <div className="bg-quant-card rounded-lg p-2">
+                          <span className="text-[9px] text-gray-500 block">Liq. at</span>
+                          <span className="text-xs font-mono text-accent-red">-{estimate.liquidationMove}%</span>
+                        </div>
+                      </div>
+                    )}
+
+                    {estimate && estimate.risk !== 'low' && (
+                      <div className={`flex items-center gap-1.5 mt-2 p-2 rounded-lg text-[10px] ${
+                        estimate.risk === 'extreme' ? 'bg-accent-red/10 text-accent-red' : 'bg-accent-orange/10 text-accent-orange'
+                      }`}>
+                        <AlertTriangle size={12} />
+                        Higher leverage = faster target but increased liquidation risk
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* Capital & Leverage */}
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="text-[10px] text-gray-500 uppercase tracking-wider mb-1.5 flex items-center gap-1">
+                      <DollarSign size={10} /> Capital
+                    </label>
+                    <div className="relative">
+                      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 text-sm">$</span>
+                      <input
+                        type="number"
+                        value={capital}
+                        onChange={(e) => setCapital(Number(e.target.value))}
+                        className="w-full bg-quant-surface border border-quant-border rounded-xl pl-7 pr-3 py-3 text-sm text-white font-mono focus:border-accent-cyan focus:outline-none"
+                      />
+                    </div>
+                  </div>
+                  <div>
+                    <label className="text-[10px] text-gray-500 uppercase tracking-wider mb-1.5 flex items-center gap-1">
+                      <Zap size={10} /> Leverage
+                    </label>
+                    <div className="relative">
+                      <input
+                        type="number"
+                        value={leverage}
+                        onChange={(e) => setLeverage(Math.max(1, Math.min(125, Number(e.target.value))))}
+                        min={1}
+                        max={125}
+                        className="w-full bg-quant-surface border border-quant-border rounded-xl px-3 py-3 text-sm text-white font-mono focus:border-accent-cyan focus:outline-none"
+                      />
+                      <span className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 text-sm">x</span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* AI Provider Warning */}
+                {!hasConfiguredProvider && (
+                  <div className="p-3 bg-accent-red/10 border border-accent-red/30 rounded-xl">
+                    <div className="flex items-start gap-2">
+                      <AlertCircle size={16} className="text-accent-red shrink-0 mt-0.5" />
+                      <div>
+                        <p className="text-sm font-medium text-accent-red">No AI Provider Configured</p>
+                        <p className="text-xs text-gray-400 mt-1">
+                          Go to Settings → AI Provider to add your API key
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* AI Provider & Results */}
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="text-[10px] text-gray-500 uppercase tracking-wider mb-1.5 flex items-center gap-1">
+                      <Cpu size={10} /> AI Model
+                    </label>
+                    <div className="flex gap-1">
+                      {AI_PROVIDERS.map((provider) => {
+                        const isConfigured = settings?.apiKeys?.[provider.id]?.length > 0
+                        const isSelected = aiProvider === provider.id
+                        return (
+                          <button
+                            key={provider.id}
+                            onClick={() => isConfigured && setAiProvider(provider.id)}
+                            disabled={!isConfigured}
+                            className={`flex-1 py-2.5 rounded-xl border text-center transition-all relative ${
+                              isSelected && isConfigured
+                                ? 'border-accent-cyan bg-accent-cyan/10'
+                                : isConfigured
+                                  ? 'border-quant-border bg-quant-surface hover:border-gray-600'
+                                  : 'border-quant-border bg-quant-surface opacity-30 cursor-not-allowed'
+                            }`}
+                            title={isConfigured ? provider.label : `${provider.label} - No API key`}
+                          >
+                            <span className="text-lg">{provider.icon}</span>
+                            {isConfigured && (
+                              <span className="absolute -top-1 -right-1 w-2 h-2 rounded-full bg-accent-green" />
+                            )}
+                          </button>
+                        )
+                      })}
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="text-[10px] text-gray-500 uppercase tracking-wider mb-1.5 flex items-center gap-1">
+                      <Hash size={10} /> Results
+                    </label>
+                    <div className="flex gap-1">
+                      {[1, 3, 5].map((num) => (
+                        <button
+                          key={num}
+                          onClick={() => setNumResults(num)}
+                          className={`flex-1 py-2.5 rounded-xl border font-mono text-sm transition-all ${
+                            numResults === num
+                              ? 'border-accent-cyan bg-accent-cyan/10 text-white'
+                              : 'border-quant-border bg-quant-surface text-gray-500 hover:border-gray-600'
+                          }`}
+                        >
+                          {num}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Min IPE */}
+                <div>
+                  <div className="flex items-center justify-between mb-1.5">
+                    <label className="text-[10px] text-gray-500 uppercase tracking-wider flex items-center gap-1">
+                      <Target size={10} /> Min IPE (Success Probability)
+                    </label>
+                    <span className="text-accent-cyan font-mono text-sm font-bold">{minIpe}%</span>
+                  </div>
                   <input
                     type="range"
-                    min={1}
-                    max={200}
-                    value={targetPct}
-                    onChange={(e) => setTargetPct(Number(e.target.value))}
-                    className="w-full h-1 mb-3"
+                    min={50}
+                    max={95}
+                    value={minIpe}
+                    onChange={(e) => setMinIpe(Number(e.target.value))}
+                    className="w-full h-1.5"
                   />
-
-                  {/* Time & Risk estimate */}
-                  {estimate && (
-                    <div className="grid grid-cols-3 gap-2 text-center">
-                      <div className="bg-quant-card rounded-lg p-2">
-                        <span className="text-[9px] text-gray-500 block">Est. Time</span>
-                        <span className="text-xs font-mono text-white">{estimate.timeStr}</span>
-                      </div>
-                      <div className="bg-quant-card rounded-lg p-2">
-                        <span className="text-[9px] text-gray-500 block">Risk</span>
-                        <span className={`text-xs font-mono capitalize ${estimate.riskColor}`}>
-                          {estimate.risk}
-                        </span>
-                      </div>
-                      <div className="bg-quant-card rounded-lg p-2">
-                        <span className="text-[9px] text-gray-500 block">Liq. at</span>
-                        <span className="text-xs font-mono text-accent-red">-{estimate.liquidationMove}%</span>
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Risk warning for high leverage */}
-                  {estimate && estimate.risk !== 'low' && (
-                    <div className={`flex items-center gap-1.5 mt-2 p-2 rounded-lg text-[10px] ${
-                      estimate.risk === 'extreme' ? 'bg-accent-red/10 text-accent-red' : 'bg-accent-orange/10 text-accent-orange'
-                    }`}>
-                      <AlertTriangle size={12} />
-                      {estimate.risk === 'extreme'
-                        ? `Extreme risk: ${leverage}x leverage can liquidate with ${estimate.liquidationMove}% move`
-                        : `Higher leverage = faster target but increased liquidation risk`
-                      }
-                    </div>
-                  )}
-                </div>
-              )}
-
-              {/* Capital & Leverage - Inline compact */}
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="text-[10px] text-gray-500 uppercase tracking-wider mb-1 flex items-center gap-1">
-                    <DollarSign size={10} /> Capital
-                  </label>
-                  <div className="relative">
-                    <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-500 text-xs">$</span>
-                    <input
-                      type="number"
-                      value={capital}
-                      onChange={(e) => setCapital(Number(e.target.value))}
-                      className="w-full bg-quant-surface border border-quant-border rounded-lg pl-6 pr-2 py-2 text-sm text-white font-mono"
-                    />
+                  <div className="flex justify-between mt-1">
+                    <span className="text-[9px] text-gray-600">More results</span>
+                    <span className="text-[9px] text-gray-600">Higher quality</span>
                   </div>
                 </div>
-                <div>
-                  <label className="text-[10px] text-gray-500 uppercase tracking-wider mb-1 flex items-center gap-1">
-                    <Zap size={10} /> Leverage
-                  </label>
-                  <div className="relative">
-                    <input
-                      type="number"
-                      value={leverage}
-                      onChange={(e) => setLeverage(Math.max(1, Math.min(125, Number(e.target.value))))}
-                      min={1}
-                      max={125}
-                      className="w-full bg-quant-surface border border-quant-border rounded-lg px-2 py-2 text-sm text-white font-mono"
-                    />
-                    <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-500 text-xs">x</span>
-                  </div>
-                </div>
-              </div>
-
-              {/* AI Provider Warning if none configured */}
-              {!hasConfiguredProvider && (
-                <div className="p-3 bg-accent-red/10 border border-accent-red/30 rounded-xl">
-                  <div className="flex items-start gap-2">
-                    <AlertCircle size={16} className="text-accent-red shrink-0 mt-0.5" />
-                    <div>
-                      <p className="text-sm font-medium text-accent-red">No AI Provider Configured</p>
-                      <p className="text-xs text-gray-400 mt-1">
-                        Go to Settings → AI Provider to add your API key
-                      </p>
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {/* AI Model & Results - Compact row */}
-              <div className="grid grid-cols-2 gap-3">
-                {/* AI Provider selection */}
-                <div>
-                  <label className="text-[10px] text-gray-500 uppercase tracking-wider mb-1 flex items-center gap-1">
-                    <Cpu size={10} /> AI Provider: <span className="text-accent-cyan">{AI_PROVIDERS.find(p => p.id === aiProvider)?.label || aiProvider}</span>
-                  </label>
-                  <div className="flex gap-1">
-                    {AI_PROVIDERS.map((provider) => {
-                      const isConfigured = settings?.apiKeys?.[provider.id]?.length > 0
-                      const isSelected = aiProvider === provider.id
-                      return (
-                        <button
-                          key={provider.id}
-                          onClick={() => {
-                            if (isConfigured) {
-                              console.log('[UI] Setting aiProvider to:', provider.id)
-                              setAiProvider(provider.id)
-                            }
-                          }}
-                          disabled={!isConfigured}
-                          className={`flex-1 py-2 rounded-lg border text-center transition-all relative ${
-                            isSelected && isConfigured
-                              ? 'border-accent-cyan bg-accent-cyan/10'
-                              : isConfigured
-                                ? 'border-quant-border bg-quant-surface hover:border-gray-600'
-                                : 'border-quant-border bg-quant-surface opacity-40 cursor-not-allowed'
-                          }`}
-                          title={isConfigured ? provider.label : `${provider.label} - No API key`}
-                        >
-                          <span className="text-sm">{provider.icon}</span>
-                          {isConfigured && (
-                            <span className="absolute -top-1 -right-1 w-2 h-2 rounded-full bg-accent-green" />
-                          )}
-                        </button>
-                      )
-                    })}
-                  </div>
-                </div>
-
-                {/* Number of Results */}
-                <div>
-                  <label className="text-[10px] text-gray-500 uppercase tracking-wider mb-1 flex items-center gap-1">
-                    <Hash size={10} /> Results
-                  </label>
-                  <div className="flex gap-1">
-                    {[1, 3, 5].map((num) => (
-                      <button
-                        key={num}
-                        onClick={() => setNumResults(num)}
-                        className={`flex-1 py-2 rounded-lg border font-mono text-xs transition-all ${
-                          numResults === num
-                            ? 'border-accent-cyan bg-accent-cyan/10 text-white'
-                            : 'border-quant-border bg-quant-surface text-gray-500'
-                        }`}
-                      >
-                        {num}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              </div>
-
-              {/* Min IPE Slider */}
-              <div>
-                <div className="flex items-center justify-between mb-1">
-                  <label className="text-[10px] text-gray-500 uppercase tracking-wider flex items-center gap-1">
-                    <Target size={10} /> Min IPE
-                  </label>
-                  <span className="text-accent-cyan font-mono text-xs">{minIpe}%</span>
-                </div>
-                <input
-                  type="range"
-                  min={50}
-                  max={95}
-                  value={minIpe}
-                  onChange={(e) => setMinIpe(Number(e.target.value))}
-                  className="w-full h-1"
-                />
-              </div>
-            </>
-          )}
+              </motion.div>
+            )}
+          </AnimatePresence>
         </div>
 
-        {/* Submit Button */}
+        {/* Footer */}
         <div className="shrink-0 p-4 border-t border-quant-border">
-          <motion.button
-            onClick={handleSubmit}
-            disabled={!canSubmit() || isGeneratingTrades}
-            whileTap={{ scale: 0.98 }}
-            className={`w-full py-3.5 rounded-xl font-bold disabled:cursor-not-allowed flex items-center justify-center gap-2 transition-all duration-300 ${
-              isGeneratingTrades
-                ? 'bg-gradient-to-r from-accent-purple via-accent-cyan to-accent-purple bg-[length:200%_100%] animate-gradient text-white'
-                : 'bg-gradient-to-r from-accent-cyan to-electric-600 text-quant-bg disabled:opacity-50'
-            }`}
-            style={{
-              boxShadow: isGeneratingTrades
-                ? '0 0 30px rgba(139, 92, 246, 0.4), 0 0 60px rgba(0, 240, 255, 0.2)'
-                : canSubmit() ? '0 0 20px rgba(0, 240, 255, 0.25)' : 'none'
-            }}
-          >
-            {isGeneratingTrades ? (
-              <motion.div
-                className="flex items-center gap-2"
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-              >
-                <motion.span
-                  animate={{ rotate: 360 }}
-                  transition={{ duration: 2, repeat: Infinity, ease: 'linear' }}
-                  className="text-lg"
-                >
-                  {LOADING_MESSAGES[loadingMsgIndex].icon}
-                </motion.span>
-                <motion.span
-                  key={loadingMsgIndex}
-                  initial={{ opacity: 0, y: 10 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, y: -10 }}
-                  className="text-sm"
-                >
-                  {LOADING_MESSAGES[loadingMsgIndex].text}
-                </motion.span>
-              </motion.div>
-            ) : (
-              <>
-                Generate Trades
-                <ArrowRight size={18} />
-              </>
-            )}
-          </motion.button>
+          {step === 'strategy' ? (
+            <motion.button
+              onClick={handleProceedToConfig}
+              disabled={!canProceedToConfig}
+              whileTap={{ scale: 0.98 }}
+              className="w-full py-4 rounded-xl bg-gradient-to-r from-accent-cyan to-electric-600 text-quant-bg font-bold disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+              style={{
+                boxShadow: canProceedToConfig ? '0 0 20px rgba(0, 240, 255, 0.25)' : 'none'
+              }}
+            >
+              Continue to Configuration
+              <ArrowRight size={18} />
+            </motion.button>
+          ) : (
+            <motion.button
+              onClick={handleExecute}
+              disabled={!canExecute || isGeneratingTrades}
+              whileTap={{ scale: 0.98 }}
+              className={`w-full py-4 rounded-xl font-bold disabled:cursor-not-allowed flex items-center justify-center gap-2 transition-all duration-300 ${
+                isGeneratingTrades
+                  ? 'bg-gradient-to-r from-accent-purple via-accent-cyan to-accent-purple bg-[length:200%_100%] animate-gradient text-white'
+                  : 'bg-gradient-to-r from-accent-cyan to-electric-600 text-quant-bg disabled:opacity-50'
+              }`}
+              style={{
+                boxShadow: isGeneratingTrades
+                  ? '0 0 30px rgba(139, 92, 246, 0.4), 0 0 60px rgba(0, 240, 255, 0.2)'
+                  : canExecute ? '0 0 20px rgba(0, 240, 255, 0.25)' : 'none'
+              }}
+            >
+              {isGeneratingTrades ? (
+                <motion.div className="flex items-center gap-2">
+                  <motion.span
+                    animate={{ rotate: 360 }}
+                    transition={{ duration: 2, repeat: Infinity, ease: 'linear' }}
+                    className="text-lg"
+                  >
+                    {LOADING_MESSAGES[loadingMsgIndex].icon}
+                  </motion.span>
+                  <motion.span
+                    key={loadingMsgIndex}
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    className="text-sm"
+                  >
+                    {LOADING_MESSAGES[loadingMsgIndex].text}
+                  </motion.span>
+                </motion.div>
+              ) : (
+                <>
+                  <Sparkles size={18} />
+                  Generate Trades
+                </>
+              )}
+            </motion.button>
+          )}
         </div>
       </motion.div>
     </motion.div>
