@@ -18,6 +18,13 @@ export default function Hatchlings() {
   const prices = useStore((state) => state.prices) || {}
   const prompts = useStore((state) => state.prompts) || []
   const setActiveTab = useStore((state) => state.setActiveTab)
+  const setNavigateToEggId = useStore((state) => state.setNavigateToEggId)
+
+  // Navigate to Incubator and expand specific egg
+  const goToEgg = (eggId) => {
+    setNavigateToEggId(eggId)
+    setActiveTab('incubator')
+  }
 
   const [expandedPrompt, setExpandedPrompt] = useState(null)
   const [sortBy, setSortBy] = useState('pnl')
@@ -604,7 +611,7 @@ export default function Hatchlings() {
                                       <button
                                         onClick={(e) => {
                                           e.stopPropagation()
-                                          setActiveTab('incubator')
+                                          goToEgg(egg.id)
                                         }}
                                         className="p-2 rounded-lg hover:bg-quant-surface text-gray-500 hover:text-accent-cyan transition-colors"
                                         title="View in Incubator"

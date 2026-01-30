@@ -1089,6 +1089,11 @@ If no truly new strategy can be generated, you must invent a new angle rather th
       selectedPromptId: null,
       setSelectedPromptId: (id) => set({ selectedPromptId: id }),
 
+      // Cross-page egg navigation (from Hatchlings to Incubator)
+      navigateToEggId: null,
+      setNavigateToEggId: (eggId) => set({ navigateToEggId: eggId }),
+      clearNavigateToEggId: () => set({ navigateToEggId: null }),
+
       // Cloud Sync State
       syncStatus: {
         syncing: false,

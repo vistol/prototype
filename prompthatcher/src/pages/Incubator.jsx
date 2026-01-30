@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Archive, Clock, TrendingUp, TrendingDown, ChevronDown, ChevronUp, Activity, DollarSign, Zap, Cpu, Target, Hash, Radio, Filter, ArrowUpDown, Brain, MessageSquare, CheckCircle2, XCircle, Shield, Lightbulb, HelpCircle } from 'lucide-react'
 import useStore from '../store/useStore'
@@ -29,8 +29,35 @@ export default function Incubator() {
   const signals = useStore((state) => state.signals) || []
   const prices = useStore((state) => state.prices) || {}
   const priceStatus = useStore((state) => state.priceStatus) || {}
+  const navigateToEggId = useStore((state) => state.navigateToEggId)
+  const clearNavigateToEggId = useStore((state) => state.clearNavigateToEggId)
   const [activeFilter, setActiveFilter] = useState('live')
   const [expandedEgg, setExpandedEgg] = useState(null)
+
+  // Handle navigation from Hatchlings - expand the correct egg
+  useEffect(() => {
+    if (navigateToEggId) {
+      // Find if the egg exists and determine which filter to use
+      const targetEgg = eggs.find(e => e.id === navigateToEggId)
+      if (targetEgg) {
+        // Check if egg is completed (hatched or expired)
+        const isExpired = targetEgg.expiresAt && new Date(targetEgg.expiresAt) <= new Date()
+        const isCompleted = targetEgg.status === 'hatched' || (targetEgg.status === 'incubating' && isExpired)
+
+        // Switch to completed tab if the egg is completed
+        if (isCompleted) {
+          setActiveFilter('completed')
+        } else {
+          setActiveFilter('live')
+        }
+
+        // Expand the egg
+        setExpandedEgg(navigateToEggId)
+      }
+      // Clear the navigation state
+      clearNavigateToEggId()
+    }
+  }, [navigateToEggId, eggs, clearNavigateToEggId])
   const [expandedConfig, setExpandedConfig] = useState({}) // Track expanded config per egg
   const [activeTab, setActiveTab] = useState({}) // Track active tab per egg: 'config', 'trades', 'ai'
   const [showConsole, setShowConsole] = useState(false)
