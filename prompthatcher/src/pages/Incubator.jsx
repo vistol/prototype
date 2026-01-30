@@ -677,6 +677,7 @@ Configuración:
                         initial={{ height: 0, opacity: 0 }}
                         animate={{ height: 'auto', opacity: 1 }}
                         exit={{ height: 0, opacity: 0 }}
+                        transition={{ type: 'tween', duration: 0.2 }}
                         className="border-t border-quant-border overflow-hidden"
                       >
                         <div className="bg-quant-surface/20">
