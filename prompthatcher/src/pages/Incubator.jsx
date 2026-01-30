@@ -25,7 +25,10 @@ const AI_MODEL_LABELS = {
 }
 
 export default function Incubator() {
-  const { eggs, signals, prices, priceStatus } = useStore()
+  const eggs = useStore((state) => state.eggs) || []
+  const signals = useStore((state) => state.signals) || []
+  const prices = useStore((state) => state.prices) || {}
+  const priceStatus = useStore((state) => state.priceStatus) || {}
   const [activeFilter, setActiveFilter] = useState('live')
   const [expandedEgg, setExpandedEgg] = useState(null)
   const [expandedConfig, setExpandedConfig] = useState({}) // Track expanded config per egg

@@ -4,7 +4,8 @@ import useStore from '../store/useStore'
 import Header from '../components/Header'
 
 export default function Signals() {
-  const { signals, openSignalDetail } = useStore()
+  const signals = useStore((state) => state.signals) || []
+  const openSignalDetail = useStore((state) => state.openSignalDetail)
 
   const sortedSignals = [...signals].sort(
     (a, b) => new Date(b.createdAt) - new Date(a.createdAt)

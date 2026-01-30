@@ -10,7 +10,8 @@ const tabs = [
 ]
 
 export default function BottomNav() {
-  const { activeTab, setActiveTab } = useStore()
+  const activeTab = useStore((state) => state.activeTab) || 'incubator'
+  const setActiveTab = useStore((state) => state.setActiveTab)
 
   return (
     <nav className="fixed bottom-0 left-0 right-0 bg-quant-card/95 backdrop-blur-lg border-t border-quant-border safe-area-bottom z-50">

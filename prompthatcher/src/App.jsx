@@ -15,33 +15,33 @@ import Onboarding from './components/Onboarding'
 import EggIcon from './components/EggIcon'
 
 function App() {
-  const {
-    activeTab,
-    isNewPromptModalOpen,
-    setNewPromptModalOpen,
-    isSignalDetailOpen,
-    selectedPromptId,
-    onboardingCompleted,
-    startPriceRefresh,
-    stopPriceRefresh,
-    isCloudInitialized,
-    isInitializing,
-    initializeFromCloud,
-    settings
-  } = useStore()
+  // Use individual selectors with safe defaults
+  const activeTab = useStore((state) => state.activeTab) || 'incubator'
+  const isNewPromptModalOpen = useStore((state) => state.isNewPromptModalOpen) || false
+  const setNewPromptModalOpen = useStore((state) => state.setNewPromptModalOpen)
+  const isSignalDetailOpen = useStore((state) => state.isSignalDetailOpen) || false
+  const selectedPromptId = useStore((state) => state.selectedPromptId)
+  const onboardingCompleted = useStore((state) => state.onboardingCompleted) || false
+  const startPriceRefresh = useStore((state) => state.startPriceRefresh)
+  const stopPriceRefresh = useStore((state) => state.stopPriceRefresh)
+  const isCloudInitialized = useStore((state) => state.isCloudInitialized) || false
+  const isInitializing = useStore((state) => state.isInitializing) || false
+  const initializeFromCloud = useStore((state) => state.initializeFromCloud)
+  const settings = useStore((state) => state.settings) || {}
 
   // Initialize data from Supabase cloud on app start
+  const supabaseConfig = settings?.supabase || {}
   useEffect(() => {
     if (onboardingCompleted && !isCloudInitialized && !isInitializing) {
       // Check if Supabase is configured
-      if (settings.supabase?.url && settings.supabase?.anonKey) {
+      if (supabaseConfig.url && supabaseConfig.anonKey) {
         initializeFromCloud()
       } else {
         // No Supabase, mark as initialized with empty data
         useStore.setState({ isCloudInitialized: true })
       }
     }
-  }, [onboardingCompleted, isCloudInitialized, isInitializing, settings.supabase, initializeFromCloud])
+  }, [onboardingCompleted, isCloudInitialized, isInitializing, supabaseConfig.url, supabaseConfig.anonKey, initializeFromCloud])
 
   // Start price refresh interval when cloud data is loaded
   useEffect(() => {

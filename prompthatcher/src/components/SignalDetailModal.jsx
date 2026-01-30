@@ -3,7 +3,8 @@ import { X, TrendingUp, TrendingDown, Target, Shield, Info, Lightbulb, FileText 
 import useStore from '../store/useStore'
 
 export default function SignalDetailModal() {
-  const { selectedSignal, closeSignalDetail } = useStore()
+  const selectedSignal = useStore((state) => state.selectedSignal)
+  const closeSignalDetail = useStore((state) => state.closeSignalDetail)
 
   if (!selectedSignal) return null
 
