@@ -59,6 +59,7 @@ export default function Incubator() {
     }
   }, [navigateToEggId, eggs, clearNavigateToEggId])
   const [expandedConfig, setExpandedConfig] = useState({}) // Track expanded config per egg
+  const [expandedTrades, setExpandedTrades] = useState({}) // Track expanded trades for minimal list design
   const [activeTab, setActiveTab] = useState({}) // Track active tab per egg: 'config', 'trades', 'ai'
   const [showConsole, setShowConsole] = useState(false)
 
@@ -92,6 +93,11 @@ export default function Incubator() {
   // Toggle config expansion for an egg
   const toggleConfigExpand = (eggId) => {
     setExpandedConfig(prev => ({ ...prev, [eggId]: !prev[eggId] }))
+  }
+
+  // Toggle trade expansion for minimal list design
+  const toggleTradeExpand = (tradeId) => {
+    setExpandedTrades(prev => ({ ...prev, [tradeId]: !prev[tradeId] }))
   }
 
   // Check if egg is expired
@@ -790,164 +796,205 @@ Configuración:
                           )})()}
 
                           {/* Trades Section - Show when trades tab active */}
+                          {/* NEW DESIGN: Minimal List (collapsed) + PnL-First (expanded) */}
                           {getActiveTab(egg.id) === 'trades' && (
                           <div>
                             <span className="text-[10px] text-gray-500 uppercase tracking-wider block mb-2">Trades ({eggSignals.length})</span>
-                            <div className="space-y-2">
-                          {eggSignals.map((signal) => {
-                            const isLong = signal.strategy === 'LONG'
-                            const isClosed = signal.status === 'closed'
-                            const price = getPrice(signal.asset)
-                            const unrealizedPnl = getPnl(signal)
-                            const cvdOk = !isClosed && !status.isExpired ? getCVD(signal) : null
 
-                            return (
-                              <div
-                                key={signal.id}
-                                className={`rounded-xl p-3 ${
-                                  isClosed
-                                    ? signal.result === 'win'
-                                      ? 'bg-accent-green/5 border border-accent-green/20'
-                                      : 'bg-accent-red/5 border border-accent-red/20'
-                                    : 'bg-quant-card border border-quant-border'
-                                }`}
-                              >
-                                {/* Trade header */}
-                                <div className="flex items-center justify-between">
-                                  <div className="flex items-center gap-2">
-                                    {isLong ? (
-                                      <TrendingUp size={16} className="text-accent-green" />
-                                    ) : (
-                                      <TrendingDown size={16} className="text-accent-red" />
-                                    )}
-                                    <span className="font-medium text-white">{signal.asset}</span>
-                                    {cvdOk !== null && (
-                                      <span className={`w-1.5 h-1.5 rounded-full ${cvdOk ? 'bg-accent-green' : 'bg-accent-red'}`} />
-                                    )}
-                                  </div>
+                            {/* Minimal List Design - Compact table-like view */}
+                            <div className="rounded-xl overflow-hidden border border-quant-border">
+                              {eggSignals.map((signal, idx) => {
+                                const isLong = signal.strategy === 'LONG'
+                                const isClosed = signal.status === 'closed'
+                                const price = getPrice(signal.asset)
+                                const unrealizedPnl = getPnl(signal)
+                                const isTradeExpanded = expandedTrades[signal.id]
 
-                                  {/* PnL display */}
-                                  {isClosed ? (
-                                    <span className={`font-mono font-bold ${
-                                      signal.result === 'win' ? 'text-accent-green' : 'text-accent-red'
-                                    }`}>
-                                      {(signal.pnl || 0) >= 0 ? '+' : ''}{(signal.pnl || 0).toFixed(2)}%
-                                    </span>
-                                  ) : unrealizedPnl !== null && unrealizedPnl !== undefined && !isNaN(unrealizedPnl) ? (
-                                    <span className={`font-mono font-bold ${
-                                      unrealizedPnl >= 0 ? 'text-accent-green' : 'text-accent-red'
-                                    }`}>
-                                      {unrealizedPnl >= 0 ? '+' : ''}{(unrealizedPnl || 0).toFixed(2)}%
-                                    </span>
-                                  ) : status.isExpired ? (
-                                    <span className="text-xs text-accent-orange">Expired</span>
-                                  ) : (
-                                    <span className="text-xs text-gray-500">Waiting...</span>
-                                  )}
-                                </div>
+                                // Calculate PnL values for display
+                                const entry = parseFloat(signal.entry)
+                                const tp = parseFloat(signal.takeProfit)
+                                const sl = parseFloat(signal.stopLoss)
+                                const lev = signal.leverage || egg.config?.leverage || 5
+                                const totalCap = egg.config?.capital || signal.capital || 1000
+                                const numTrades = eggSignals.length || 1
+                                const cap = signal.capital || (totalCap / numTrades)
 
-                                {/* Price levels - compact */}
-                                <div className="flex items-center gap-4 mt-2 text-xs font-mono">
-                                  <span className="text-gray-400">
-                                    E <span className="text-white">{(parseFloat(signal.entry) || 0).toFixed(2)}</span>
-                                  </span>
-                                  {price && !isClosed && (
-                                    <span className="text-accent-cyan">
-                                      Now {(price || 0).toFixed(2)}
-                                    </span>
-                                  )}
-                                  <span className="text-accent-green ml-auto">
-                                    TP {(parseFloat(signal.takeProfit) || 0).toFixed(2)}
-                                  </span>
-                                  <span className="text-accent-red">
-                                    SL {(parseFloat(signal.stopLoss) || 0).toFixed(2)}
-                                  </span>
-                                </div>
+                                // Price movement percentages
+                                const tpMovePct = isLong ? ((tp - entry) / entry) * 100 : ((entry - tp) / entry) * 100
+                                const slMovePct = isLong ? ((entry - sl) / entry) * 100 : ((sl - entry) / entry) * 100
 
-                                {/* POTENTIAL PROFIT - Clear display for dummies */}
-                                {!isClosed && (
-                                  (() => {
-                                    const entry = parseFloat(signal.entry)
-                                    const tp = parseFloat(signal.takeProfit)
-                                    const sl = parseFloat(signal.stopLoss)
-                                    // Use signal values or fall back to egg config (default 5x leverage)
-                                    const lev = signal.leverage || egg.config?.leverage || 5
-                                    const totalCap = egg.config?.capital || signal.capital || 1000
-                                    const numTrades = eggSignals.length || 1
-                                    const cap = signal.capital || (totalCap / numTrades)
+                                // $ profit/loss with leverage
+                                const potentialProfit = (tpMovePct / 100) * lev * cap
+                                const potentialLoss = (slMovePct / 100) * lev * cap
 
-                                    // Calculate price movement percentages
-                                    const tpMovePct = isLong
-                                      ? ((tp - entry) / entry) * 100
-                                      : ((entry - tp) / entry) * 100
-                                    const slMovePct = isLong
-                                      ? ((entry - sl) / entry) * 100
-                                      : ((sl - entry) / entry) * 100
+                                // Current PnL in dollars
+                                const currentPnlPct = isClosed ? (signal.pnl || 0) : (unrealizedPnl || 0)
+                                const currentPnlDollar = (currentPnlPct / 100) * lev * cap
+                                const isProfit = currentPnlPct >= 0
 
-                                    // Calculate $ profit/loss with leverage
-                                    const potentialProfit = (tpMovePct / 100) * lev * cap
-                                    const potentialLoss = (slMovePct / 100) * lev * cap
-                                    const profitPct = tpMovePct * lev
+                                // Determine status color
+                                const statusColor = isClosed
+                                  ? (signal.result === 'win' ? 'bg-accent-green' : 'bg-accent-red')
+                                  : (unrealizedPnl >= 0 ? 'bg-accent-green' : unrealizedPnl < 0 ? 'bg-accent-red' : 'bg-accent-cyan')
 
-                                    return (
-                                      <div className="mt-2 p-2 rounded-lg bg-gradient-to-r from-accent-green/10 to-accent-red/10 border border-quant-border">
-                                        <div className="flex items-center justify-between text-[10px] text-gray-500 mb-1">
-                                          <span>SI GANAS ({isLong ? '↑' : '↓'} al TP)</span>
-                                          <span>SI PIERDES ({isLong ? '↓' : '↑'} al SL)</span>
-                                        </div>
-                                        <div className="flex items-center justify-between">
-                                          <div className="text-accent-green font-bold">
-                                            <span className="text-lg">+${(potentialProfit || 0).toFixed(0)}</span>
-                                            <span className="text-xs ml-1 opacity-70">(+{(profitPct || 0).toFixed(0)}%)</span>
-                                          </div>
-                                          <div className="text-accent-red font-bold text-right">
-                                            <span className="text-lg">-${(potentialLoss || 0).toFixed(0)}</span>
-                                            <span className="text-xs ml-1 opacity-70">(-{((slMovePct || 0) * (lev || 1)).toFixed(0)}%)</span>
-                                          </div>
-                                        </div>
-                                        <div className="text-[9px] text-gray-500 text-center mt-1">
-                                          Capital: ${(cap || 0).toFixed(0)} × {lev || 1}x leverage
-                                        </div>
+                                return (
+                                  <div key={signal.id}>
+                                    {/* COLLAPSED STATE: Minimal List Row */}
+                                    <div
+                                      onClick={() => toggleTradeExpand(signal.id)}
+                                      className={`flex items-center cursor-pointer transition-colors hover:bg-quant-surface/50 ${
+                                        idx !== 0 ? 'border-t border-quant-border/50' : ''
+                                      } ${isTradeExpanded ? 'bg-quant-surface/30' : ''}`}
+                                    >
+                                      {/* Color bar indicator */}
+                                      <div className={`w-1 self-stretch ${statusColor}`} />
+
+                                      {/* Asset with direction */}
+                                      <div className="flex items-center gap-1.5 py-2.5 px-3 min-w-[90px]">
+                                        {isLong ? (
+                                          <TrendingUp size={12} className="text-accent-green" />
+                                        ) : (
+                                          <TrendingDown size={12} className="text-accent-red" />
+                                        )}
+                                        <span className="font-medium text-white text-sm">{signal.asset?.replace('/USDT', '')}</span>
                                       </div>
-                                    )
-                                  })()
-                                )}
 
-                                {/* Progress bar - only for active trades */}
-                                {price && !isClosed && !status.isExpired && (
-                                  <div className="mt-2">
-                                    {(() => {
-                                      const entry = parseFloat(signal.entry)
-                                      const tp = parseFloat(signal.takeProfit)
-                                      const sl = parseFloat(signal.stopLoss)
-                                      const range = tp - sl
-                                      const progressRaw = ((price - sl) / range) * 100
-                                      const entryRaw = ((entry - sl) / range) * 100
-                                      const progress = Math.max(0, Math.min(100, isLong ? progressRaw : (100 - progressRaw)))
-                                      const entryPos = Math.max(0, Math.min(100, isLong ? entryRaw : (100 - entryRaw)))
-                                      const isProfit = progressRaw > entryRaw
+                                      {/* Entry → Current */}
+                                      <div className="flex-1 py-2.5 px-2 font-mono text-xs">
+                                        <span className="text-gray-400">{entry.toFixed(2)}</span>
+                                        <span className="text-gray-600 mx-1">→</span>
+                                        <span className={isClosed ? 'text-gray-400' : 'text-white'}>
+                                          {isClosed ? (signal.exitPrice || entry).toFixed(2) : (price || entry).toFixed(2)}
+                                        </span>
+                                      </div>
 
-                                      return (
-                                        <div className="h-1 bg-quant-surface rounded-full relative">
-                                          <div
-                                            className="absolute top-0 bottom-0 w-0.5 bg-white/60 z-10"
-                                            style={{ left: `${entryPos}%` }}
-                                          />
-                                          <motion.div
-                                            initial={{ width: 0 }}
-                                            animate={{ width: `${progress}%` }}
-                                            className={`h-full rounded-full ${
-                                              isProfit ? 'bg-accent-green' : 'bg-accent-red'
-                                            }`}
-                                          />
-                                        </div>
-                                      )
-                                    })()}
+                                      {/* PnL in $ */}
+                                      <div className={`py-2.5 px-2 font-mono text-sm font-bold min-w-[70px] text-right ${
+                                        isProfit ? 'text-accent-green' : 'text-accent-red'
+                                      }`}>
+                                        {isProfit ? '+' : ''}{currentPnlDollar.toFixed(0)}$
+                                      </div>
+
+                                      {/* PnL in % */}
+                                      <div className={`py-2.5 px-3 font-mono text-xs min-w-[65px] text-right ${
+                                        isProfit ? 'text-accent-green' : 'text-accent-red'
+                                      }`}>
+                                        {currentPnlPct >= 0 ? '+' : ''}{currentPnlPct.toFixed(2)}%
+                                      </div>
+                                    </div>
+
+                                    {/* EXPANDED STATE: PnL-First Design */}
+                                    <AnimatePresence>
+                                      {isTradeExpanded && (
+                                        <motion.div
+                                          initial={{ height: 0, opacity: 0 }}
+                                          animate={{ height: 'auto', opacity: 1 }}
+                                          exit={{ height: 0, opacity: 0 }}
+                                          transition={{ duration: 0.2 }}
+                                          className="overflow-hidden border-t border-quant-border/30"
+                                        >
+                                          <div className="p-3 bg-quant-surface/20">
+                                            {/* PnL Dominant Display */}
+                                            <div className="flex items-center justify-between mb-3">
+                                              <div className={`text-2xl font-bold font-mono ${isProfit ? 'text-accent-green' : 'text-accent-red'}`}>
+                                                {isProfit ? '+' : ''}{currentPnlDollar.toFixed(0)}$
+                                                <span className="text-sm ml-2 opacity-70">
+                                                  ({currentPnlPct >= 0 ? '+' : ''}{currentPnlPct.toFixed(2)}%)
+                                                </span>
+                                              </div>
+                                              {isClosed && (
+                                                <span className={`text-xs px-2 py-1 rounded-full ${
+                                                  signal.result === 'win'
+                                                    ? 'bg-accent-green/20 text-accent-green'
+                                                    : 'bg-accent-red/20 text-accent-red'
+                                                }`}>
+                                                  {signal.result === 'win' ? 'WIN' : 'LOSS'}
+                                                </span>
+                                              )}
+                                            </div>
+
+                                            {/* Progress Bar (only for active trades) */}
+                                            {!isClosed && price && !status.isExpired && (
+                                              <div className="mb-3">
+                                                {(() => {
+                                                  const range = tp - sl
+                                                  const progressRaw = ((price - sl) / range) * 100
+                                                  const entryRaw = ((entry - sl) / range) * 100
+                                                  const progress = Math.max(0, Math.min(100, isLong ? progressRaw : (100 - progressRaw)))
+                                                  const entryPos = Math.max(0, Math.min(100, isLong ? entryRaw : (100 - entryRaw)))
+                                                  const isProfitBar = isLong ? (price > entry) : (price < entry)
+
+                                                  return (
+                                                    <div className="h-2 bg-quant-bg rounded-full relative">
+                                                      {/* Entry marker */}
+                                                      <div
+                                                        className="absolute top-0 bottom-0 w-0.5 bg-white z-10"
+                                                        style={{ left: `${entryPos}%` }}
+                                                      />
+                                                      {/* Progress fill */}
+                                                      <motion.div
+                                                        initial={{ width: 0 }}
+                                                        animate={{ width: `${progress}%` }}
+                                                        className={`h-full rounded-full ${isProfitBar ? 'bg-accent-green' : 'bg-accent-red'}`}
+                                                      />
+                                                      {/* TP/SL labels */}
+                                                      <div className="absolute -bottom-4 left-0 text-[9px] text-accent-red font-mono">SL</div>
+                                                      <div className="absolute -bottom-4 right-0 text-[9px] text-accent-green font-mono">TP</div>
+                                                    </div>
+                                                  )
+                                                })()}
+                                              </div>
+                                            )}
+
+                                            {/* Price Levels - Chips style */}
+                                            <div className="flex items-center gap-2 mb-3 mt-4 flex-wrap">
+                                              <span className="text-xs px-2 py-1 rounded-lg bg-quant-bg text-gray-400 font-mono">
+                                                E {entry.toFixed(2)}
+                                              </span>
+                                              {!isClosed && price && (
+                                                <span className="text-xs px-2 py-1 rounded-lg bg-accent-cyan/10 text-accent-cyan font-mono">
+                                                  Now {price.toFixed(2)}
+                                                </span>
+                                              )}
+                                              <span className="text-xs px-2 py-1 rounded-lg bg-accent-green/10 text-accent-green font-mono">
+                                                TP {tp.toFixed(2)}
+                                              </span>
+                                              <span className="text-xs px-2 py-1 rounded-lg bg-accent-red/10 text-accent-red font-mono">
+                                                SL {sl.toFixed(2)}
+                                              </span>
+                                            </div>
+
+                                            {/* Potential Profit/Loss (only for active trades) */}
+                                            {!isClosed && (
+                                              <div className="flex items-center justify-between p-2 rounded-lg bg-quant-bg">
+                                                <div>
+                                                  <div className="text-[10px] text-gray-500 mb-0.5">si gana</div>
+                                                  <div className="text-accent-green font-bold font-mono">
+                                                    +${potentialProfit.toFixed(0)}
+                                                    <span className="text-xs opacity-70 ml-1">(+{(tpMovePct * lev).toFixed(0)}%)</span>
+                                                  </div>
+                                                </div>
+                                                <div className="text-right">
+                                                  <div className="text-[10px] text-gray-500 mb-0.5">si pierde</div>
+                                                  <div className="text-accent-red font-bold font-mono">
+                                                    -${potentialLoss.toFixed(0)}
+                                                    <span className="text-xs opacity-70 ml-1">(-{(slMovePct * lev).toFixed(0)}%)</span>
+                                                  </div>
+                                                </div>
+                                              </div>
+                                            )}
+
+                                            {/* Capital info */}
+                                            <div className="text-[10px] text-gray-500 text-center mt-2">
+                                              ${cap.toFixed(0)} × {lev}x leverage
+                                            </div>
+                                          </div>
+                                        </motion.div>
+                                      )}
+                                    </AnimatePresence>
                                   </div>
-                                )}
-                              </div>
-                            )
-                          })}
+                                )
+                              })}
                             </div>
                           </div>
                           )}
