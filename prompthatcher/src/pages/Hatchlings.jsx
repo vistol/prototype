@@ -1,45 +1,34 @@
-import { useState } from 'react'
+import { useState, useMemo } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Trophy, TrendingUp, TrendingDown, Target, Award, ChevronDown, ChevronUp, BarChart3, Percent, DollarSign, Clock, Calendar, Zap, Cpu, Hash, Filter } from 'lucide-react'
+import { Trophy, TrendingUp, TrendingDown, Target, Award, ChevronDown, ChevronUp, BarChart3, Percent, FileText, Filter, ExternalLink, Layers } from 'lucide-react'
+import { useNavigate } from 'react-router-dom'
 import useStore from '../store/useStore'
 import Header from '../components/Header'
 import EggIcon from '../components/EggIcon'
 
-// Execution time labels
-const EXECUTION_LABELS = {
-  target: 'Target Based',
-  scalping: 'Scalping',
-  intraday: 'Intraday',
-  swing: 'Swing'
-}
-
-// AI Model labels
-const AI_MODEL_LABELS = {
-  gemini: { name: 'Gemini', icon: '🔮' },
-  openai: { name: 'GPT-4', icon: '🤖' },
-  grok: { name: 'Grok', icon: '⚡' }
-}
-
 export default function Hatchlings() {
-  const { eggs, signals, prices } = useStore()
-  const [expandedEgg, setExpandedEgg] = useState(null)
-  const [sortBy, setSortBy] = useState('pnl') // 'pnl', 'winRate', 'profitFactor', 'date'
-  const [filterBy, setFilterBy] = useState('all') // 'all', 'profitable', 'unprofitable', 'hatched', 'expired'
+  const navigate = useNavigate()
+  const { eggs, signals, prices, prompts } = useStore()
+  const [expandedPrompt, setExpandedPrompt] = useState(null)
+  const [sortBy, setSortBy] = useState('pnl') // 'pnl', 'winRate', 'eggs', 'trades'
+  const [filterBy, setFilterBy] = useState('all') // 'all', 'profitable', 'unprofitable'
 
   // Check if egg is expired
   const isEggExpired = (egg) => egg.expiresAt && new Date(egg.expiresAt) <= new Date()
 
-  // Calculate PnL percentage for a signal
+  // Check if egg is completed (hatched or expired)
+  const isEggCompleted = (egg) => {
+    return egg.status === 'hatched' || (egg.status === 'incubating' && isEggExpired(egg))
+  }
+
+  // Calculate PnL for a signal
   const getSignalPnl = (signal) => {
-    // If closed, use stored pnl
     if (signal.status === 'closed' && signal.pnl !== undefined) {
       return signal.pnl
     }
-    // If has unrealizedPnl from price check
     if (signal.unrealizedPnl !== undefined) {
       return signal.unrealizedPnl
     }
-    // Calculate from current price
     const currentPrice = prices[signal.asset]?.price
     if (!currentPrice) return 0
     const entry = parseFloat(signal.entry)
@@ -50,151 +39,152 @@ export default function Hatchlings() {
     }
   }
 
-  // Calculate results for an egg (handles both closed and expired trades)
+  // Calculate egg results
   const calculateEggResults = (egg) => {
     const eggSignals = signals.filter(s => egg.trades.includes(s.id))
-    const closedSignals = eggSignals.filter(s => s.status === 'closed')
-    const activeSignals = eggSignals.filter(s => s.status === 'active')
-
-    // For expired eggs, treat active trades as "expired" with their unrealized PnL
-    const expired = isEggExpired(egg)
-
-    // All signals to consider for PnL calculation
-    const signalsForPnl = expired ? eggSignals : closedSignals
-
-    if (signalsForPnl.length === 0) {
-      return {
-        totalTrades: eggSignals.length,
-        closedTrades: closedSignals.length,
-        expiredTrades: expired ? activeSignals.length : 0,
-        wins: 0,
-        losses: 0,
-        winRate: 0,
-        totalPnl: 0,
-        profitFactor: 0,
-        avgIpe: eggSignals.length > 0 ? Math.round(eggSignals.reduce((sum, s) => sum + (s.ipe || 0), 0) / eggSignals.length) : 0,
-        maxDrawdown: 0
-      }
+    if (eggSignals.length === 0) {
+      return { totalPnl: 0, winRate: 0, totalTrades: 0, wins: 0, losses: 0 }
     }
 
-    // Calculate PnL for all relevant signals
-    const pnlValues = signalsForPnl.map(s => getSignalPnl(s))
+    const pnlValues = eggSignals.map(s => getSignalPnl(s))
     const avgPnl = pnlValues.reduce((sum, p) => sum + p, 0) / pnlValues.length
-
-    // Count wins/losses based on PnL
     const wins = pnlValues.filter(p => p > 0).length
     const losses = pnlValues.filter(p => p < 0).length
 
-    // Profit factor
-    const grossProfit = pnlValues.filter(p => p > 0).reduce((sum, p) => sum + p, 0)
-    const grossLoss = Math.abs(pnlValues.filter(p => p < 0).reduce((sum, p) => sum + p, 0))
-
-    const avgIpe = eggSignals.reduce((sum, s) => sum + (s.ipe || 0), 0) / eggSignals.length
-
     return {
-      totalTrades: eggSignals.length,
-      closedTrades: closedSignals.length,
-      expiredTrades: expired ? activeSignals.length : 0,
-      wins,
-      losses,
-      winRate: signalsForPnl.length > 0 ? Math.round((wins / signalsForPnl.length) * 100) : 0,
       totalPnl: avgPnl,
-      profitFactor: grossLoss > 0 ? grossProfit / grossLoss : (grossProfit > 0 ? Infinity : 0),
-      avgIpe: Math.round(avgIpe),
-      maxDrawdown: 0
+      winRate: Math.round((wins / eggSignals.length) * 100),
+      totalTrades: eggSignals.length,
+      wins,
+      losses
     }
   }
 
-  // Get all completed eggs (hatched + expired)
-  const completedEggs = eggs
-    .filter(e => {
-      const expired = isEggExpired(e)
-      const isCompleted = e.status === 'hatched' || (e.status === 'incubating' && expired)
-      if (!isCompleted) return false
+  // Aggregate data by prompt
+  const promptStats = useMemo(() => {
+    // Get all completed eggs
+    const completedEggs = eggs.filter(isEggCompleted)
 
-      // Get results for filtering
-      const results = e.results || calculateEggResults(e)
+    // Group eggs by promptId or promptName
+    const promptGroups = {}
 
-      // Apply filter
-      switch (filterBy) {
-        case 'profitable':
-          return results.totalPnl >= 0
-        case 'unprofitable':
-          return results.totalPnl < 0
-        case 'hatched':
-          return e.status === 'hatched'
-        case 'expired':
-          return e.status === 'incubating' && expired
-        default:
-          return true
+    completedEggs.forEach(egg => {
+      const promptKey = egg.promptId || egg.promptName || 'Unknown'
+      const promptName = egg.promptName || 'Unknown Strategy'
+
+      if (!promptGroups[promptKey]) {
+        // Try to find the prompt in the prompts list
+        const promptData = prompts.find(p => p.id === egg.promptId || p.name === egg.promptName)
+
+        promptGroups[promptKey] = {
+          id: promptKey,
+          name: promptName,
+          content: promptData?.content || egg.promptContent || '',
+          eggs: [],
+          totalPnl: 0,
+          totalTrades: 0,
+          totalWins: 0,
+          totalLosses: 0
+        }
       }
+
+      const results = egg.results || calculateEggResults(egg)
+      const eggData = {
+        ...egg,
+        results,
+        isExpired: isEggExpired(egg)
+      }
+
+      promptGroups[promptKey].eggs.push(eggData)
+      promptGroups[promptKey].totalTrades += results.totalTrades
+      promptGroups[promptKey].totalWins += results.wins
+      promptGroups[promptKey].totalLosses += results.losses
     })
-    .map(e => ({
-      ...e,
-      isExpired: isEggExpired(e),
-      results: e.results || calculateEggResults(e)
-    }))
-    .sort((a, b) => {
+
+    // Calculate aggregate stats for each prompt
+    Object.values(promptGroups).forEach(group => {
+      // Calculate average PnL across all eggs
+      if (group.eggs.length > 0) {
+        group.totalPnl = group.eggs.reduce((sum, e) => sum + (e.results?.totalPnl || 0), 0) / group.eggs.length
+      }
+      group.winRate = group.totalTrades > 0
+        ? Math.round((group.totalWins / group.totalTrades) * 100)
+        : 0
+      group.eggWinRate = group.eggs.length > 0
+        ? Math.round((group.eggs.filter(e => (e.results?.totalPnl || 0) >= 0).length / group.eggs.length) * 100)
+        : 0
+
+      // Sort eggs by PnL within each prompt
+      group.eggs.sort((a, b) => (b.results?.totalPnl || 0) - (a.results?.totalPnl || 0))
+    })
+
+    // Convert to array and apply filters
+    let result = Object.values(promptGroups)
+
+    // Apply filter
+    if (filterBy === 'profitable') {
+      result = result.filter(p => p.totalPnl >= 0)
+    } else if (filterBy === 'unprofitable') {
+      result = result.filter(p => p.totalPnl < 0)
+    }
+
+    // Apply sort
+    result.sort((a, b) => {
       switch (sortBy) {
         case 'winRate':
-          return b.results.winRate - a.results.winRate
-        case 'profitFactor':
-          const pfA = a.results.profitFactor === Infinity ? 9999 : a.results.profitFactor
-          const pfB = b.results.profitFactor === Infinity ? 9999 : b.results.profitFactor
-          return pfB - pfA
-        case 'date':
-          return new Date(b.hatchedAt || b.expiresAt) - new Date(a.hatchedAt || a.expiresAt)
+          return b.winRate - a.winRate
+        case 'eggs':
+          return b.eggs.length - a.eggs.length
+        case 'trades':
+          return b.totalTrades - a.totalTrades
         case 'pnl':
         default:
-          return b.results.totalPnl - a.results.totalPnl
+          return b.totalPnl - a.totalPnl
       }
     })
 
-  // Dashboard stats
-  const totalPnl = completedEggs.reduce((sum, e) => sum + (e.results?.totalPnl || 0), 0)
-  const avgWinRate = completedEggs.length > 0
-    ? completedEggs.reduce((sum, e) => sum + (e.results?.winRate || 0), 0) / completedEggs.length
-    : 0
-  const totalTrades = completedEggs.reduce((sum, e) => sum + (e.results?.totalTrades || 0), 0)
-  const winningEggs = completedEggs.filter(e => e.results?.totalPnl >= 0).length
-  const hatchedCount = completedEggs.filter(e => e.status === 'hatched').length
-  const expiredCount = completedEggs.filter(e => e.isExpired).length
+    return result
+  }, [eggs, signals, prices, prompts, filterBy, sortBy])
 
-  // Calculate overall profit factor
-  const totalWins = completedEggs.reduce((sum, e) => {
-    const eggSignals = signals.filter(s => e.trades.includes(s.id) && s.result === 'win')
-    return sum + eggSignals.reduce((s, t) => s + (t.pnl || 0), 0)
-  }, 0)
-  const totalLosses = Math.abs(completedEggs.reduce((sum, e) => {
-    const eggSignals = signals.filter(s => e.trades.includes(s.id) && s.result === 'loss')
-    return sum + eggSignals.reduce((s, t) => s + (t.pnl || 0), 0)
-  }, 0))
-  const overallProfitFactor = totalLosses > 0 ? totalWins / totalLosses : totalWins > 0 ? Infinity : 0
+  // Global stats
+  const globalStats = useMemo(() => {
+    const allPnl = promptStats.reduce((sum, p) => sum + p.totalPnl * p.eggs.length, 0)
+    const totalEggs = promptStats.reduce((sum, p) => sum + p.eggs.length, 0)
+    const avgPnl = totalEggs > 0 ? allPnl / totalEggs : 0
 
-  const getEggSignals = (egg) => {
-    return signals.filter(s => egg.trades.includes(s.id))
-  }
+    const totalTrades = promptStats.reduce((sum, p) => sum + p.totalTrades, 0)
+    const totalWins = promptStats.reduce((sum, p) => sum + p.totalWins, 0)
+    const avgWinRate = totalTrades > 0 ? Math.round((totalWins / totalTrades) * 100) : 0
 
-  const formatDate = (dateString) => {
-    if (!dateString) return '-'
-    const date = new Date(dateString)
-    return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
-  }
+    const profitablePrompts = promptStats.filter(p => p.totalPnl >= 0).length
+
+    return {
+      totalPrompts: promptStats.length,
+      totalEggs,
+      totalTrades,
+      avgPnl,
+      avgWinRate,
+      profitablePrompts
+    }
+  }, [promptStats])
 
   const sortOptions = [
     { id: 'pnl', label: 'PnL' },
     { id: 'winRate', label: 'Win Rate' },
-    { id: 'profitFactor', label: 'Profit Factor' },
-    { id: 'date', label: 'Recent' }
+    { id: 'eggs', label: 'Most Eggs' },
+    { id: 'trades', label: 'Most Trades' }
   ]
 
   const filterOptions = [
     { id: 'all', label: 'All' },
     { id: 'profitable', label: 'Profitable' },
-    { id: 'unprofitable', label: 'Loss' },
-    { id: 'hatched', label: 'Hatched' },
-    { id: 'expired', label: 'Expired' }
+    { id: 'unprofitable', label: 'Loss' }
   ]
+
+  const formatDate = (dateString) => {
+    if (!dateString) return '-'
+    return new Date(dateString).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+  }
 
   return (
     <motion.div
@@ -203,33 +193,33 @@ export default function Hatchlings() {
       exit={{ opacity: 0 }}
     >
       <Header
-        title="Hatchlings"
-        subtitle={`${completedEggs.length} completed`}
+        title="Strategy Report"
+        subtitle={`${globalStats.totalPrompts} strategies analyzed`}
       />
 
-      {/* Dashboard */}
       <div className="px-4 pb-4">
+        {/* Dashboard Stats */}
         <div className="grid grid-cols-2 gap-3 mb-4">
-          {/* Total PnL */}
+          {/* Avg PnL per Egg */}
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             className={`bg-quant-card border rounded-2xl p-4 ${
-              totalPnl >= 0 ? 'border-accent-green/30' : 'border-accent-red/30'
+              globalStats.avgPnl >= 0 ? 'border-accent-green/30' : 'border-accent-red/30'
             }`}
           >
             <div className="flex items-center gap-2 mb-2">
-              {totalPnl >= 0 ? (
+              {globalStats.avgPnl >= 0 ? (
                 <TrendingUp size={16} className="text-accent-green" />
               ) : (
                 <TrendingDown size={16} className="text-accent-red" />
               )}
-              <span className="text-xs text-gray-400">Total PnL</span>
+              <span className="text-xs text-gray-400">Avg PnL / Egg</span>
             </div>
             <span className={`text-2xl font-bold font-mono ${
-              totalPnl >= 0 ? 'text-accent-green' : 'text-accent-red'
+              globalStats.avgPnl >= 0 ? 'text-accent-green' : 'text-accent-red'
             }`}>
-              {totalPnl >= 0 ? '+' : ''}{totalPnl.toFixed(1)}%
+              {globalStats.avgPnl >= 0 ? '+' : ''}{globalStats.avgPnl.toFixed(1)}%
             </span>
           </motion.div>
 
@@ -239,21 +229,21 @@ export default function Hatchlings() {
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.05 }}
             className={`bg-quant-card border rounded-2xl p-4 ${
-              avgWinRate >= 50 ? 'border-accent-green/30' : 'border-accent-red/30'
+              globalStats.avgWinRate >= 50 ? 'border-accent-green/30' : 'border-accent-red/30'
             }`}
           >
             <div className="flex items-center gap-2 mb-2">
               <Target size={16} className="text-accent-cyan" />
-              <span className="text-xs text-gray-400">Avg Win Rate</span>
+              <span className="text-xs text-gray-400">Win Rate</span>
             </div>
             <span className={`text-2xl font-bold font-mono ${
-              avgWinRate >= 50 ? 'text-accent-green' : 'text-accent-red'
+              globalStats.avgWinRate >= 50 ? 'text-accent-green' : 'text-accent-red'
             }`}>
-              {avgWinRate.toFixed(1)}%
+              {globalStats.avgWinRate}%
             </span>
           </motion.div>
 
-          {/* Total Trades */}
+          {/* Total Eggs */}
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
@@ -261,15 +251,15 @@ export default function Hatchlings() {
             className="bg-quant-card border border-quant-border rounded-2xl p-4"
           >
             <div className="flex items-center gap-2 mb-2">
-              <BarChart3 size={16} className="text-accent-cyan" />
-              <span className="text-xs text-gray-400">Total Trades</span>
+              <Layers size={16} className="text-accent-purple" />
+              <span className="text-xs text-gray-400">Total Eggs</span>
             </div>
             <span className="text-2xl font-bold font-mono text-white">
-              {totalTrades}
+              {globalStats.totalEggs}
             </span>
           </motion.div>
 
-          {/* Profit Factor */}
+          {/* Total Trades */}
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
@@ -277,19 +267,17 @@ export default function Hatchlings() {
             className="bg-quant-card border border-quant-border rounded-2xl p-4"
           >
             <div className="flex items-center gap-2 mb-2">
-              <Percent size={16} className="text-accent-cyan" />
-              <span className="text-xs text-gray-400">Profit Factor</span>
+              <BarChart3 size={16} className="text-accent-cyan" />
+              <span className="text-xs text-gray-400">Total Trades</span>
             </div>
-            <span className={`text-2xl font-bold font-mono ${
-              overallProfitFactor >= 1 ? 'text-accent-green' : 'text-accent-red'
-            }`}>
-              {overallProfitFactor === Infinity ? '∞' : overallProfitFactor.toFixed(2)}
+            <span className="text-2xl font-bold font-mono text-white">
+              {globalStats.totalTrades}
             </span>
           </motion.div>
         </div>
 
-        {/* Success Rate Bar */}
-        {completedEggs.length > 0 && (
+        {/* Strategy Success Bar */}
+        {globalStats.totalPrompts > 0 && (
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
@@ -297,33 +285,23 @@ export default function Hatchlings() {
             className="bg-quant-card border border-quant-border rounded-2xl p-4 mb-4"
           >
             <div className="flex items-center justify-between mb-2">
-              <span className="text-xs text-gray-400">Egg Success Rate</span>
+              <span className="text-xs text-gray-400">Strategy Success Rate</span>
               <span className="text-sm font-mono text-accent-cyan">
-                {winningEggs}/{completedEggs.length} profitable
+                {globalStats.profitablePrompts}/{globalStats.totalPrompts} profitable
               </span>
             </div>
             <div className="h-3 bg-quant-surface rounded-full overflow-hidden flex">
               <motion.div
                 initial={{ width: 0 }}
-                animate={{ width: `${(winningEggs / completedEggs.length) * 100}%` }}
+                animate={{ width: `${(globalStats.profitablePrompts / globalStats.totalPrompts) * 100}%` }}
                 transition={{ delay: 0.3, duration: 0.5 }}
                 className="h-full bg-gradient-to-r from-accent-green to-accent-cyan"
               />
-              <motion.div
-                initial={{ width: 0 }}
-                animate={{ width: `${((completedEggs.length - winningEggs) / completedEggs.length) * 100}%` }}
-                transition={{ delay: 0.3, duration: 0.5 }}
-                className="h-full bg-accent-red/50"
-              />
-            </div>
-            <div className="flex justify-between mt-2 text-xs text-gray-500">
-              <span>{hatchedCount} hatched</span>
-              <span>{expiredCount} expired</span>
             </div>
           </motion.div>
         )}
 
-        {/* Filter Options */}
+        {/* Filters */}
         <div className="flex items-center gap-2 mb-3 overflow-x-auto hide-scrollbar">
           <Filter size={14} className="text-gray-500 shrink-0" />
           {filterOptions.map((option) => (
@@ -359,119 +337,103 @@ export default function Hatchlings() {
           ))}
         </div>
 
-        {/* Hatchlings List */}
+        {/* Prompts List */}
         <div className="space-y-3">
           <h2 className="text-sm font-semibold text-gray-400 uppercase tracking-wider flex items-center gap-2">
-            <Award size={14} />
-            Results ({completedEggs.length})
+            <FileText size={14} />
+            Strategies by Performance ({promptStats.length})
           </h2>
 
-          {completedEggs.length === 0 ? (
+          {promptStats.length === 0 ? (
             <div className="text-center py-12">
               <div className="w-20 h-20 mx-auto mb-4 rounded-full bg-quant-surface flex items-center justify-center">
-                <EggIcon size={48} status="hatched" />
+                <FileText size={32} className="text-gray-600" />
               </div>
-              <p className="text-gray-400 mb-2">No completed eggs yet</p>
+              <p className="text-gray-400 mb-2">No completed strategies yet</p>
               <p className="text-sm text-gray-500">
-                Eggs will appear here when all their trades complete
+                Strategies will appear here when their eggs complete
               </p>
             </div>
           ) : (
             <AnimatePresence mode="popLayout">
-              {completedEggs.map((egg, index) => {
-                const isWinner = egg.results?.totalPnl >= 0
+              {promptStats.map((prompt, index) => {
+                const isWinner = prompt.totalPnl >= 0
                 const rank = index + 1
-                const isExpanded = expandedEgg === egg.id
-                const eggSignals = getEggSignals(egg)
+                const isExpanded = expandedPrompt === prompt.id
 
                 return (
                   <motion.div
-                    key={egg.id}
+                    key={prompt.id}
                     layout
                     initial={{ opacity: 0, x: -20 }}
                     animate={{ opacity: 1, x: 0 }}
-                    transition={{ delay: index * 0.05 }}
+                    transition={{ delay: index * 0.03 }}
                     className={`bg-quant-card border rounded-2xl overflow-hidden transition-all ${
-                      egg.isExpired
-                        ? 'border-accent-orange/20'
-                        : isWinner
-                          ? 'border-accent-green/20'
-                          : 'border-accent-red/20'
+                      isWinner ? 'border-accent-green/20' : 'border-accent-red/20'
                     }`}
                   >
-                    {/* Main Card */}
+                    {/* Prompt Header */}
                     <button
-                      onClick={() => setExpandedEgg(isExpanded ? null : egg.id)}
+                      onClick={() => setExpandedPrompt(isExpanded ? null : prompt.id)}
                       className="w-full p-4 text-left"
                     >
                       <div className="flex items-center gap-3">
                         {/* Rank */}
-                        <div className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-sm shrink-0 ${
+                        <div className={`w-10 h-10 rounded-xl flex items-center justify-center font-bold text-sm shrink-0 ${
                           rank === 1 ? 'bg-accent-yellow/20 text-accent-yellow' :
                           rank === 2 ? 'bg-gray-400/20 text-gray-300' :
                           rank === 3 ? 'bg-accent-orange/20 text-accent-orange' :
                           'bg-quant-surface text-gray-500'
                         }`}>
-                          {rank <= 3 ? (
-                            <Trophy size={16} />
-                          ) : rank}
+                          {rank <= 3 ? <Trophy size={18} /> : `#${rank}`}
                         </div>
-
-                        {/* Egg Icon */}
-                        <EggIcon
-                          size={44}
-                          status={egg.isExpired ? 'expired' : 'hatched'}
-                          winRate={egg.results?.winRate || 0}
-                        />
 
                         {/* Content */}
                         <div className="flex-1 min-w-0">
-                          <div className="flex items-center justify-between">
+                          <div className="flex items-center justify-between mb-1">
+                            <h3 className="font-semibold text-white truncate">{prompt.name}</h3>
                             <div className="flex items-center gap-2">
-                              <h3 className="font-semibold text-white truncate">{egg.promptName}</h3>
-                              {egg.isExpired && (
-                                <span className="text-[10px] px-1.5 py-0.5 rounded bg-accent-orange/20 text-accent-orange">
-                                  Expired
-                                </span>
+                              <span className="text-xs text-gray-500 bg-quant-surface px-2 py-0.5 rounded-full">
+                                {prompt.eggs.length} eggs
+                              </span>
+                              {isExpanded ? (
+                                <ChevronUp size={16} className="text-gray-500" />
+                              ) : (
+                                <ChevronDown size={16} className="text-gray-500" />
                               )}
                             </div>
-                            {isExpanded ? (
-                              <ChevronUp size={18} className="text-gray-500 shrink-0" />
-                            ) : (
-                              <ChevronDown size={18} className="text-gray-500 shrink-0" />
-                            )}
                           </div>
 
-                          {/* KPIs */}
-                          <div className="flex items-center gap-4 mt-2">
+                          {/* Stats Row */}
+                          <div className="flex items-center gap-4">
                             <div>
-                              <span className="text-xs text-gray-500">Win</span>
-                              <span className={`block font-mono text-sm ${
-                                egg.results?.winRate >= 50 ? 'text-accent-green' : 'text-accent-red'
+                              <span className="text-[10px] text-gray-500 uppercase">PnL</span>
+                              <span className={`block font-mono text-sm font-bold ${
+                                isWinner ? 'text-accent-green' : 'text-accent-red'
                               }`}>
-                                {egg.results?.winRate || 0}%
+                                {isWinner ? '+' : ''}{prompt.totalPnl.toFixed(1)}%
                               </span>
                             </div>
                             <div>
-                              <span className="text-xs text-gray-500">PF</span>
+                              <span className="text-[10px] text-gray-500 uppercase">Win Rate</span>
                               <span className={`block font-mono text-sm ${
-                                egg.results?.profitFactor >= 1 ? 'text-accent-green' : 'text-accent-red'
+                                prompt.winRate >= 50 ? 'text-accent-green' : 'text-accent-red'
                               }`}>
-                                {egg.results?.profitFactor === Infinity ? '∞' : (egg.results?.profitFactor || 0).toFixed(1)}
+                                {prompt.winRate}%
                               </span>
                             </div>
                             <div>
-                              <span className="text-xs text-gray-500">Trades</span>
+                              <span className="text-[10px] text-gray-500 uppercase">Trades</span>
                               <span className="block font-mono text-sm text-white">
-                                {egg.results?.closedTrades || 0}/{egg.results?.totalTrades || 0}
+                                {prompt.totalTrades}
                               </span>
                             </div>
-                            <div className="ml-auto text-right">
-                              <span className="text-xs text-gray-500">PnL</span>
-                              <span className={`block font-mono font-bold ${
-                                egg.results?.totalPnl >= 0 ? 'text-accent-green' : 'text-accent-red'
-                              }`}>
-                                {egg.results?.totalPnl >= 0 ? '+' : ''}{(egg.results?.totalPnl || 0).toFixed(1)}%
+                            <div>
+                              <span className="text-[10px] text-gray-500 uppercase">W/L</span>
+                              <span className="block font-mono text-sm">
+                                <span className="text-accent-green">{prompt.totalWins}</span>
+                                <span className="text-gray-500">/</span>
+                                <span className="text-accent-red">{prompt.totalLosses}</span>
                               </span>
                             </div>
                           </div>
@@ -479,7 +441,7 @@ export default function Hatchlings() {
                       </div>
                     </button>
 
-                    {/* Expanded Details */}
+                    {/* Expanded: Eggs List */}
                     <AnimatePresence>
                       {isExpanded && (
                         <motion.div
@@ -488,151 +450,104 @@ export default function Hatchlings() {
                           exit={{ height: 0, opacity: 0 }}
                           className="border-t border-quant-border overflow-hidden"
                         >
-                          <div className="p-4 bg-quant-surface/30 space-y-4">
-                            {/* Configuration Section */}
-                            {egg.config && (
-                              <div className="bg-quant-card rounded-xl p-3 border border-quant-border">
-                                <span className="text-[10px] text-gray-500 uppercase tracking-wider block mb-2">Configuration</span>
-                                <div className="grid grid-cols-3 gap-2">
-                                  <div className="flex items-center gap-1.5">
-                                    <DollarSign size={12} className="text-accent-cyan" />
-                                    <span className="text-xs text-gray-400">Capital</span>
-                                    <span className="text-xs font-mono text-white ml-auto">${egg.config.capital}</span>
-                                  </div>
-                                  <div className="flex items-center gap-1.5">
-                                    <Zap size={12} className="text-accent-yellow" />
-                                    <span className="text-xs text-gray-400">Leverage</span>
-                                    <span className="text-xs font-mono text-white ml-auto">{egg.config.leverage}x</span>
-                                  </div>
-                                  <div className="flex items-center gap-1.5">
-                                    <Clock size={12} className="text-accent-purple" />
-                                    <span className="text-xs text-gray-400">Time</span>
-                                    <span className="text-xs text-white ml-auto">{EXECUTION_LABELS[egg.config.executionTime] || egg.config.executionTime}</span>
-                                  </div>
-                                  <div className="flex items-center gap-1.5">
-                                    <Cpu size={12} className="text-accent-green" />
-                                    <span className="text-xs text-gray-400">AI</span>
-                                    <span className="text-xs text-white ml-auto">
-                                      {AI_MODEL_LABELS[egg.config.aiModel]?.icon} {AI_MODEL_LABELS[egg.config.aiModel]?.name || egg.config.aiModel}
-                                    </span>
-                                  </div>
-                                  <div className="flex items-center gap-1.5">
-                                    <Target size={12} className="text-accent-orange" />
-                                    <span className="text-xs text-gray-400">Min IPE</span>
-                                    <span className="text-xs font-mono text-white ml-auto">{egg.config.minIpe}%</span>
-                                  </div>
-                                  <div className="flex items-center gap-1.5">
-                                    <Hash size={12} className="text-gray-400" />
-                                    <span className="text-xs text-gray-400">Results</span>
-                                    <span className="text-xs font-mono text-white ml-auto">{egg.config.numResults}</span>
-                                  </div>
-                                </div>
+                          <div className="p-4 bg-quant-surface/30 space-y-3">
+                            {/* Strategy Content Preview */}
+                            {prompt.content && (
+                              <div className="p-3 bg-quant-bg/50 rounded-xl border border-quant-border">
+                                <span className="text-[10px] text-gray-500 uppercase tracking-wider block mb-1">Strategy</span>
+                                <p className="text-xs text-gray-300 line-clamp-3">{prompt.content}</p>
                               </div>
                             )}
 
-                            {/* Extended Stats */}
-                            <div className="grid grid-cols-4 gap-2">
-                              <div className="bg-quant-card rounded-xl p-3 text-center">
-                                <span className="text-xs text-gray-500 block">Wins</span>
-                                <span className="font-mono text-accent-green font-bold">
-                                  {egg.results?.wins || 0}
-                                </span>
-                              </div>
-                              <div className="bg-quant-card rounded-xl p-3 text-center">
-                                <span className="text-xs text-gray-500 block">Losses</span>
-                                <span className="font-mono text-accent-red font-bold">
-                                  {egg.results?.losses || 0}
-                                </span>
-                              </div>
-                              <div className="bg-quant-card rounded-xl p-3 text-center">
-                                <span className="text-xs text-gray-500 block">Avg IPE</span>
-                                <span className="font-mono text-accent-cyan font-bold">
-                                  {egg.results?.avgIpe || 0}%
-                                </span>
-                              </div>
-                              <div className="bg-quant-card rounded-xl p-3 text-center">
-                                <span className="text-xs text-gray-500 block">Status</span>
-                                <span className={`font-mono font-bold ${
-                                  egg.isExpired ? 'text-accent-orange' : 'text-accent-green'
-                                }`}>
-                                  {egg.isExpired ? 'Exp' : 'Done'}
-                                </span>
-                              </div>
-                            </div>
-
-                            {/* Date Info */}
-                            <div className="flex items-center justify-between text-xs text-gray-500">
-                              <div className="flex items-center gap-1">
-                                <Calendar size={12} />
-                                <span>Incubated: {formatDate(egg.createdAt)}</span>
-                              </div>
-                              <div className="flex items-center gap-1">
-                                <Clock size={12} />
-                                <span>
-                                  {egg.isExpired ? 'Expired' : 'Hatched'}: {formatDate(egg.hatchedAt || egg.expiresAt)}
-                                </span>
-                              </div>
-                            </div>
-
-                            {/* Trade History */}
-                            <div>
-                              <span className="text-xs text-gray-500 uppercase tracking-wider block mb-2">
-                                Trade History ({eggSignals.length})
+                            {/* Eggs Header */}
+                            <div className="flex items-center justify-between">
+                              <span className="text-xs text-gray-500 uppercase tracking-wider">
+                                Eggs sorted by PnL ({prompt.eggs.length})
                               </span>
-                              <div className="space-y-2">
-                                {eggSignals.map((signal) => {
-                                  const signalPnl = getSignalPnl(signal)
-                                  const isExpiredTrade = egg.isExpired && signal.status !== 'closed'
-                                  return (
-                                    <div
-                                      key={signal.id}
-                                      className={`bg-quant-card rounded-xl p-3 border ${
-                                        signal.result === 'win'
-                                          ? 'border-accent-green/30'
-                                          : signal.result === 'loss'
-                                            ? 'border-accent-red/30'
-                                            : isExpiredTrade
-                                              ? 'border-accent-orange/30'
-                                              : 'border-quant-border'
-                                      }`}
-                                    >
-                                      <div className="flex items-center justify-between">
+                              <span className="text-xs text-gray-500">
+                                {prompt.eggs.filter(e => (e.results?.totalPnl || 0) >= 0).length} profitable
+                              </span>
+                            </div>
+
+                            {/* Eggs List */}
+                            <div className="space-y-2">
+                              {prompt.eggs.map((egg, eggIndex) => {
+                                const eggPnl = egg.results?.totalPnl || 0
+                                const eggIsWinner = eggPnl >= 0
+
+                                return (
+                                  <div
+                                    key={egg.id}
+                                    className={`bg-quant-card rounded-xl p-3 border transition-all ${
+                                      egg.isExpired
+                                        ? 'border-accent-orange/20'
+                                        : eggIsWinner
+                                          ? 'border-accent-green/20'
+                                          : 'border-accent-red/20'
+                                    }`}
+                                  >
+                                    <div className="flex items-center gap-3">
+                                      {/* Egg Rank within prompt */}
+                                      <div className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold shrink-0 ${
+                                        eggIndex === 0 ? 'bg-accent-yellow/20 text-accent-yellow' : 'bg-quant-surface text-gray-500'
+                                      }`}>
+                                        {eggIndex + 1}
+                                      </div>
+
+                                      {/* Egg Icon */}
+                                      <EggIcon
+                                        size={32}
+                                        status={egg.isExpired ? 'expired' : 'hatched'}
+                                        winRate={egg.results?.winRate || 0}
+                                      />
+
+                                      {/* Egg Info */}
+                                      <div className="flex-1 min-w-0">
                                         <div className="flex items-center gap-2">
-                                          <span className={`text-xs font-bold px-2 py-0.5 rounded ${
-                                            signal.strategy === 'LONG'
-                                              ? 'bg-accent-green/20 text-accent-green'
-                                              : 'bg-accent-red/20 text-accent-red'
-                                          }`}>
-                                            {signal.strategy}
+                                          <span className="text-sm text-white">
+                                            {formatDate(egg.createdAt)}
                                           </span>
-                                          <span className="font-medium text-white">{signal.asset}</span>
-                                          {isExpiredTrade && (
+                                          {egg.isExpired && (
                                             <span className="text-[10px] px-1.5 py-0.5 rounded bg-accent-orange/20 text-accent-orange">
                                               Expired
                                             </span>
                                           )}
                                         </div>
+                                        <div className="flex items-center gap-3 text-xs text-gray-500">
+                                          <span>{egg.results?.totalTrades || 0} trades</span>
+                                          <span>
+                                            <span className="text-accent-green">{egg.results?.wins || 0}W</span>
+                                            {' / '}
+                                            <span className="text-accent-red">{egg.results?.losses || 0}L</span>
+                                          </span>
+                                          <span>WR: {egg.results?.winRate || 0}%</span>
+                                        </div>
+                                      </div>
+
+                                      {/* PnL */}
+                                      <div className="text-right">
                                         <span className={`font-mono font-bold ${
-                                          signalPnl >= 0 ? 'text-accent-green' : 'text-accent-red'
+                                          eggIsWinner ? 'text-accent-green' : 'text-accent-red'
                                         }`}>
-                                          {signalPnl >= 0 ? '+' : ''}{signalPnl.toFixed(2)}%
+                                          {eggIsWinner ? '+' : ''}{eggPnl.toFixed(1)}%
                                         </span>
                                       </div>
-                                      <div className="flex items-center justify-between mt-2 text-xs text-gray-500">
-                                        <span>Entry: <span className="text-white font-mono">${signal.entry}</span></span>
-                                        <span className={signal.result === 'win' ? 'text-accent-green' : signal.result === 'loss' ? 'text-accent-red' : 'text-gray-400'}>
-                                          {signal.result === 'win' ? `TP: $${signal.takeProfit}` : signal.result === 'loss' ? `SL: $${signal.stopLoss}` : `TP: $${signal.takeProfit}`}
-                                        </span>
-                                        <span className={`font-bold ${
-                                          signal.ipe >= 80 ? 'text-accent-green' : 'text-accent-yellow'
-                                        }`}>
-                                          IPE: {signal.ipe}%
-                                        </span>
-                                      </div>
+
+                                      {/* Link to Incubator */}
+                                      <button
+                                        onClick={(e) => {
+                                          e.stopPropagation()
+                                          navigate('/incubator')
+                                        }}
+                                        className="p-2 rounded-lg hover:bg-quant-surface text-gray-500 hover:text-accent-cyan transition-colors"
+                                        title="View in Incubator"
+                                      >
+                                        <ExternalLink size={14} />
+                                      </button>
                                     </div>
-                                  )
-                                })}
-                              </div>
+                                  </div>
+                                )
+                              })}
                             </div>
                           </div>
                         </motion.div>
