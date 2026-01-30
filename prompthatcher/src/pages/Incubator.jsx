@@ -1,6 +1,6 @@
 import { useState, useMemo } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Archive, Clock, TrendingUp, TrendingDown, ChevronDown, ChevronUp, Activity, DollarSign, Zap, Cpu, Target, Hash, Radio, Filter, ArrowUpDown, Brain, MessageSquare } from 'lucide-react'
+import { Archive, Clock, TrendingUp, TrendingDown, ChevronDown, ChevronUp, Activity, DollarSign, Zap, Cpu, Target, Hash, Radio, Filter, ArrowUpDown, Brain, MessageSquare, CheckCircle2, XCircle, Shield, Lightbulb, HelpCircle } from 'lucide-react'
 import useStore from '../store/useStore'
 import Header from '../components/Header'
 import EggIcon from '../components/EggIcon'
@@ -940,12 +940,12 @@ Configuración:
                                 </span>
                               </div>
 
-                              {/* AI Reasoning per Trade */}
+                              {/* AI Reasoning per Trade - Glass Box Trading */}
                               <div>
                                 <div className="flex items-center gap-2 mb-2">
                                   <Brain size={14} className="text-accent-cyan" />
                                   <span className="text-[10px] text-gray-500 uppercase tracking-wider">
-                                    Razonamiento del AI ({eggSignals.length} trades)
+                                    Glass Box: Transparencia Total ({eggSignals.length} trades)
                                   </span>
                                 </div>
                                 <div className="space-y-3">
@@ -964,6 +964,15 @@ Configuración:
                                           <span className="font-medium text-white">{signal.asset}</span>
                                           <span className="ml-auto text-xs text-gray-500">IPE: {signal.ipe}%</span>
                                         </div>
+
+                                        {/* One-line Summary */}
+                                        <div className="flex items-start gap-2 mt-2 p-2 bg-quant-bg/50 rounded-lg">
+                                          <Lightbulb size={12} className="text-accent-yellow shrink-0 mt-0.5" />
+                                          <p className="text-xs text-gray-300">
+                                            {signal.summary || signal.explanation || 'Trade generado según tu estrategia'}
+                                          </p>
+                                        </div>
+
                                         <div className="grid grid-cols-4 gap-2 text-xs mt-2">
                                           <div>
                                             <span className="text-gray-500">Entry</span>
@@ -979,28 +988,100 @@ Configuración:
                                           </div>
                                           <div>
                                             <span className="text-gray-500">R:R</span>
-                                            <span className="text-white font-mono ml-1">{signal.riskRewardRatio || '2.0'}:1</span>
+                                            <span className="text-white font-mono ml-1">1:{signal.riskRewardRatio || '2.0'}</span>
                                           </div>
                                         </div>
                                       </div>
 
-                                      {/* AI Reasoning */}
-                                      <div className="p-3">
-                                        <div className="text-sm text-gray-300 mb-3">
-                                          {signal.aiReasoning || signal.explanation || 'Razonamiento del AI no disponible para trades antiguos.'}
-                                        </div>
+                                      {/* Decision Breakdown */}
+                                      <div className="p-3 space-y-3">
+                                        {/* Why Questions */}
+                                        {signal.reasoning && (
+                                          <div className="space-y-2">
+                                            <div className="flex items-center gap-1 text-[10px] text-gray-500 uppercase tracking-wider">
+                                              <HelpCircle size={10} />
+                                              Desglose de Decisión
+                                            </div>
+                                            <div className="grid gap-2">
+                                              <div className="p-2 bg-quant-bg/30 rounded-lg">
+                                                <span className="text-[10px] text-accent-cyan block mb-0.5">¿Por qué {signal.asset}?</span>
+                                                <p className="text-xs text-gray-300">{signal.reasoning.whyAsset}</p>
+                                              </div>
+                                              <div className="p-2 bg-quant-bg/30 rounded-lg">
+                                                <span className="text-[10px] text-accent-cyan block mb-0.5">¿Por qué {signal.strategy}?</span>
+                                                <p className="text-xs text-gray-300">{signal.reasoning.whyDirection}</p>
+                                              </div>
+                                              <div className="p-2 bg-quant-bg/30 rounded-lg">
+                                                <span className="text-[10px] text-accent-cyan block mb-0.5">¿Por qué Entry ${signal.entry}?</span>
+                                                <p className="text-xs text-gray-300">{signal.reasoning.whyEntry}</p>
+                                              </div>
+                                              <div className="p-2 bg-quant-bg/30 rounded-lg">
+                                                <span className="text-[10px] text-accent-cyan block mb-0.5">¿Por qué estos TP/SL?</span>
+                                                <p className="text-xs text-gray-300">{signal.reasoning.whyLevels}</p>
+                                              </div>
+                                            </div>
+                                          </div>
+                                        )}
 
-                                        {/* Insights */}
-                                        {signal.insights && signal.insights.length > 0 && (
-                                          <div className="space-y-1">
-                                            <span className="text-[10px] text-gray-500 uppercase">Factores clave:</span>
-                                            <div className="flex flex-wrap gap-1.5">
-                                              {signal.insights.map((insight, i) => (
-                                                <span key={i} className="text-xs px-2 py-1 rounded-lg bg-quant-surface text-gray-400">
-                                                  {insight}
-                                                </span>
+                                        {/* Criteria Matched */}
+                                        {signal.criteriaMatched && signal.criteriaMatched.length > 0 && (
+                                          <div>
+                                            <div className="flex items-center gap-1 text-[10px] text-gray-500 uppercase tracking-wider mb-2">
+                                              <CheckCircle2 size={10} />
+                                              Criterios de Estrategia
+                                            </div>
+                                            <div className="space-y-1">
+                                              {signal.criteriaMatched.map((c, i) => (
+                                                <div key={i} className="flex items-center justify-between p-1.5 bg-quant-bg/30 rounded">
+                                                  <div className="flex items-center gap-1.5">
+                                                    {c.passed ? (
+                                                      <CheckCircle2 size={10} className="text-accent-green" />
+                                                    ) : (
+                                                      <XCircle size={10} className="text-accent-red" />
+                                                    )}
+                                                    <span className="text-xs text-gray-300">{c.criterion}</span>
+                                                  </div>
+                                                  <span className={`text-xs font-mono ${c.passed ? 'text-accent-green' : 'text-accent-red'}`}>
+                                                    {c.value}
+                                                  </span>
+                                                </div>
                                               ))}
                                             </div>
+                                          </div>
+                                        )}
+
+                                        {/* Confidence Factors */}
+                                        {signal.confidenceFactors && signal.confidenceFactors.length > 0 && (
+                                          <div>
+                                            <div className="flex items-center gap-1 text-[10px] text-gray-500 uppercase tracking-wider mb-2">
+                                              <Shield size={10} />
+                                              IPE {signal.ipe}% Breakdown
+                                            </div>
+                                            <div className="space-y-1.5">
+                                              {signal.confidenceFactors.map((f, i) => (
+                                                <div key={i}>
+                                                  <div className="flex items-center justify-between text-xs mb-0.5">
+                                                    <span className="text-gray-400">{f.factor}</span>
+                                                    <span className="font-mono text-accent-cyan">
+                                                      +{(f.contribution || (f.weight * f.score / 100)).toFixed(1)}%
+                                                    </span>
+                                                  </div>
+                                                  <div className="h-1 bg-quant-bg rounded-full overflow-hidden">
+                                                    <div
+                                                      className="h-full bg-gradient-to-r from-accent-cyan to-accent-purple"
+                                                      style={{ width: `${f.score}%` }}
+                                                    />
+                                                  </div>
+                                                </div>
+                                              ))}
+                                            </div>
+                                          </div>
+                                        )}
+
+                                        {/* Legacy fallback for old trades */}
+                                        {!signal.reasoning && (
+                                          <div className="text-sm text-gray-400">
+                                            {signal.aiReasoning || signal.explanation || 'Datos de transparencia no disponibles para trades antiguos.'}
                                           </div>
                                         )}
                                       </div>
