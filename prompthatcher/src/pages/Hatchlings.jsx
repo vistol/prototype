@@ -1,6 +1,6 @@
 import { useState, useMemo } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Trophy, TrendingUp, TrendingDown, Target, Award, ChevronDown, ChevronUp, BarChart3, Percent, FileText, Filter, ExternalLink, Layers } from 'lucide-react'
+import { Trophy, TrendingUp, TrendingDown, Target, ChevronDown, ChevronUp, BarChart3, FileText, Filter, ExternalLink, Layers } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import useStore from '../store/useStore'
 import Header from '../components/Header'
@@ -32,43 +32,59 @@ export default function Hatchlings() {
 
   // Calculate PnL for a signal
   const getSignalPnl = (signal) => {
-    if (signal.status === 'closed' && signal.pnl !== undefined) {
-      return signal.pnl
-    }
-    if (signal.unrealizedPnl !== undefined) {
-      return signal.unrealizedPnl
-    }
-    const currentPrice = prices[signal.asset]?.price
-    if (!currentPrice) return 0
-    const entry = parseFloat(signal.entry)
-    if (signal.strategy === 'LONG') {
-      return ((currentPrice - entry) / entry) * 100
-    } else {
-      return ((entry - currentPrice) / entry) * 100
+    if (!signal) return 0
+    try {
+      if (signal.status === 'closed' && signal.pnl !== undefined) {
+        return signal.pnl
+      }
+      if (signal.unrealizedPnl !== undefined) {
+        return signal.unrealizedPnl
+      }
+      const currentPrice = prices?.[signal.asset]?.price
+      if (!currentPrice) return 0
+      const entry = parseFloat(signal.entry)
+      if (isNaN(entry) || entry === 0) return 0
+      if (signal.strategy === 'LONG') {
+        return ((currentPrice - entry) / entry) * 100
+      } else {
+        return ((entry - currentPrice) / entry) * 100
+      }
+    } catch (error) {
+      console.error('Error calculating signal PnL:', error)
+      return 0
     }
   }
 
   // Calculate egg results
   const calculateEggResults = (egg) => {
-    if (!egg?.trades || !Array.isArray(egg.trades)) {
-      return { totalPnl: 0, winRate: 0, totalTrades: 0, wins: 0, losses: 0 }
-    }
-    const eggSignals = signals.filter(s => egg.trades.includes(s.id))
-    if (eggSignals.length === 0) {
-      return { totalPnl: 0, winRate: 0, totalTrades: 0, wins: 0, losses: 0 }
-    }
+    const defaultResult = { totalPnl: 0, winRate: 0, totalTrades: 0, wins: 0, losses: 0 }
+    try {
+      if (!egg?.trades || !Array.isArray(egg.trades)) {
+        return defaultResult
+      }
+      if (!Array.isArray(signals)) {
+        return defaultResult
+      }
+      const eggSignals = signals.filter(s => s && egg.trades.includes(s.id))
+      if (eggSignals.length === 0) {
+        return defaultResult
+      }
 
-    const pnlValues = eggSignals.map(s => getSignalPnl(s))
-    const avgPnl = pnlValues.reduce((sum, p) => sum + (p || 0), 0) / pnlValues.length
-    const wins = pnlValues.filter(p => p > 0).length
-    const losses = pnlValues.filter(p => p < 0).length
+      const pnlValues = eggSignals.map(s => getSignalPnl(s))
+      const avgPnl = pnlValues.reduce((sum, p) => sum + (p || 0), 0) / pnlValues.length
+      const wins = pnlValues.filter(p => p > 0).length
+      const losses = pnlValues.filter(p => p < 0).length
 
-    return {
-      totalPnl: avgPnl || 0,
-      winRate: Math.round((wins / eggSignals.length) * 100) || 0,
-      totalTrades: eggSignals.length,
-      wins,
-      losses
+      return {
+        totalPnl: avgPnl || 0,
+        winRate: Math.round((wins / eggSignals.length) * 100) || 0,
+        totalTrades: eggSignals.length,
+        wins,
+        losses
+      }
+    } catch (error) {
+      console.error('Error calculating egg results:', error)
+      return defaultResult
     }
   }
 
