@@ -541,7 +541,14 @@ export const generateTradesFromPrompt = async (prompt, settings, numResults = 3)
 
   console.log(`Generated ${filteredTrades.length} trades from AI`)
 
-  return filteredTrades.slice(0, numResults)
+  // Add the full AI prompt to the trades metadata (will be saved in egg)
+  const tradesWithPrompt = filteredTrades.slice(0, numResults).map((trade, idx) => ({
+    ...trade,
+    // Only attach full prompt to first trade to avoid duplication
+    ...(idx === 0 ? { fullAIPrompt: aiPrompt } : {})
+  }))
+
+  return tradesWithPrompt
 }
 
 // Calculate standard IPE (fallback if AI doesn't provide one)

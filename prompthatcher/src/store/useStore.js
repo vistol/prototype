@@ -270,12 +270,18 @@ const useStore = create(
 
         if (selectedTrades.length === 0) return null
 
+        // Extract the full AI prompt from the first trade (if available)
+        const fullAIPrompt = selectedTrades[0]?.fullAIPrompt || null
+
         // Add trades to signals with 'active' status
-        const newSignals = selectedTrades.map(t => ({
-          ...t,
-          status: 'active',
-          selected: undefined // Remove selection flag
-        }))
+        const newSignals = selectedTrades.map(t => {
+          const { fullAIPrompt: _, ...tradeWithoutPrompt } = t
+          return {
+            ...tradeWithoutPrompt,
+            status: 'active',
+            selected: undefined // Remove selection flag
+          }
+        })
 
         // Build comprehensive prompt content for display
         // Include prompt content, or build from configuration if not available
@@ -291,6 +297,7 @@ const useStore = create(
           promptId: prompt.id,
           promptName: prompt.name,
           promptContent: promptContentDisplay,
+          fullAIPrompt: fullAIPrompt, // Store the complete prompt sent to AI
           status: 'incubating',
           trades: newSignals.map(s => s.id),
           totalCapital: selectedTrades.reduce((sum, t) => sum + (t.capital || 0), 0),

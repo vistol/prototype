@@ -984,6 +984,40 @@ Configuración:
                                 </span>
                               </div>
 
+                              {/* Full AI Prompt - Expandable */}
+                              {egg.fullAIPrompt && (
+                                <div>
+                                  <button
+                                    onClick={() => toggleConfigExpand(`prompt-${egg.id}`)}
+                                    className="flex items-center gap-2 mb-2 w-full"
+                                  >
+                                    <Cpu size={14} className="text-accent-orange" />
+                                    <span className="text-[10px] text-gray-500 uppercase tracking-wider">Prompt Enviado al AI</span>
+                                    {expandedConfig[`prompt-${egg.id}`] ? (
+                                      <ChevronUp size={14} className="text-gray-500 ml-auto" />
+                                    ) : (
+                                      <ChevronDown size={14} className="text-gray-500 ml-auto" />
+                                    )}
+                                  </button>
+                                  <AnimatePresence>
+                                    {expandedConfig[`prompt-${egg.id}`] && (
+                                      <motion.div
+                                        initial={{ height: 0, opacity: 0 }}
+                                        animate={{ height: 'auto', opacity: 1 }}
+                                        exit={{ height: 0, opacity: 0 }}
+                                        className="overflow-hidden"
+                                      >
+                                        <div className="bg-quant-bg rounded-xl p-3 border border-accent-orange/20 max-h-96 overflow-y-auto">
+                                          <pre className="text-xs text-gray-400 whitespace-pre-wrap font-mono">
+                                            {egg.fullAIPrompt}
+                                          </pre>
+                                        </div>
+                                      </motion.div>
+                                    )}
+                                  </AnimatePresence>
+                                </div>
+                              )}
+
                               {/* AI Reasoning per Trade - Glass Box Trading */}
                               <div>
                                 <div className="flex items-center gap-2 mb-2">
