@@ -6,12 +6,15 @@ import {
   syncSignals,
   syncEggs,
   syncSettings,
+  syncHealthChecks,
   loadPrompts,
   loadSignals,
   loadEggs,
   loadSettings,
+  loadHealthChecks,
   deletePromptFromCloud,
-  deleteEggFromCloud
+  deleteEggFromCloud,
+  deleteHealthCheckFromCloud
 } from '../lib/supabase'
 import { generateTradesFromPrompt } from '../lib/aiService'
 import {
@@ -1106,6 +1109,34 @@ If no truly new strategy can be generated, you must invent a new angle rather th
       // Health Checks (batch presets)
       healthChecks: [],
       showHealthCheckModal: false,
+      addHealthCheck: (healthCheck) => {
+        set((state) => ({
+          healthChecks: [...state.healthChecks, healthCheck]
+        }))
+        get().triggerSync()
+      },
+      updateHealthCheck: (id, updates) => {
+        set((state) => ({
+          healthChecks: state.healthChecks.map(hc =>
+            hc.id === id ? { ...hc, ...updates } : hc
+          )
+        }))
+        get().triggerSync()
+      },
+      deleteHealthCheck: async (id) => {
+        const client = get().getClient()
+        if (client) {
+          await deleteHealthCheckFromCloud(client, id)
+        }
+        set((state) => ({
+          healthChecks: state.healthChecks.filter(hc => hc.id !== id)
+        }))
+        get().triggerSync()
+      },
+      setHealthChecks: (healthChecks) => {
+        set({ healthChecks })
+        get().triggerSync()
+      },
 
       // Cross-page egg navigation (from Prompts to Incubator)
       navigateToEggId: null,
@@ -1196,15 +1227,16 @@ If no truly new strategy can be generated, you must invent a new angle rather th
 
         try {
           // Sync all data in parallel
-          const [promptsResult, signalsResult, eggsResult, settingsResult] = await Promise.all([
+          const [promptsResult, signalsResult, eggsResult, settingsResult, healthChecksResult] = await Promise.all([
             syncPrompts(client, state.prompts),
             syncSignals(client, state.signals),
             syncEggs(client, state.eggs),
-            syncSettings(client, state.settings)
+            syncSettings(client, state.settings),
+            syncHealthChecks(client, state.healthChecks)
           ])
 
-          const hasError = !promptsResult.success || !signalsResult.success || !eggsResult.success || !settingsResult.success
-          const errorMsg = promptsResult.error || signalsResult.error || eggsResult.error || settingsResult.error
+          const hasError = !promptsResult.success || !signalsResult.success || !eggsResult.success || !settingsResult.success || !healthChecksResult.success
+          const errorMsg = promptsResult.error || signalsResult.error || eggsResult.error || settingsResult.error || healthChecksResult.error
 
           set({
             syncStatus: {
@@ -1217,7 +1249,7 @@ If no truly new strategy can be generated, you must invent a new angle rather th
 
           // Update Supabase connected status
           if (!hasError) {
-            get().addLog('sync', `Sync complete: ${state.prompts.length} prompts, ${state.signals.length} signals, ${state.eggs.length} eggs`)
+            get().addLog('sync', `Sync complete: ${state.prompts.length} prompts, ${state.signals.length} signals, ${state.eggs.length} eggs, ${state.healthChecks.length} health checks`)
             set((s) => ({
               settings: {
                 ...s.settings,
@@ -1256,11 +1288,12 @@ If no truly new strategy can be generated, you must invent a new angle rather th
         set({ syncStatus: { ...state.syncStatus, loading: true, error: null } })
 
         try {
-          const [promptsResult, signalsResult, eggsResult, settingsResult] = await Promise.all([
+          const [promptsResult, signalsResult, eggsResult, settingsResult, healthChecksResult] = await Promise.all([
             loadPrompts(client),
             loadSignals(client),
             loadEggs(client),
-            loadSettings(client)
+            loadSettings(client),
+            loadHealthChecks(client)
           ])
 
           // Cloud data replaces local data completely
@@ -1291,6 +1324,11 @@ If no truly new strategy can be generated, you must invent a new angle rather th
                 systemPrompt: settingsResult.data.systemPrompt || s.settings.systemPrompt
               }
             }))
+          }
+
+          if (healthChecksResult.success) {
+            get().addLog('sync', `Loaded ${healthChecksResult.data.length} health checks from cloud`)
+            set({ healthChecks: healthChecksResult.data })
           }
 
           set({
@@ -1337,7 +1375,6 @@ If no truly new strategy can be generated, you must invent a new angle rather th
       // Persist settings locally including API keys
       partialize: (state) => ({
         onboardingCompleted: state.onboardingCompleted,
-        healthChecks: state.healthChecks,
         settings: {
           supabase: state.settings.supabase,
           tradingPlatform: state.settings.tradingPlatform,
@@ -1349,7 +1386,6 @@ If no truly new strategy can be generated, you must invent a new angle rather th
       merge: (persistedState, currentState) => ({
         ...currentState,
         ...persistedState,
-        healthChecks: persistedState?.healthChecks || [],
         settings: {
           ...currentState.settings,
           ...(persistedState?.settings || {}),

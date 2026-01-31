@@ -412,3 +412,85 @@ export const deletePromptFromCloud = async (client, promptId) => {
     return { success: false, error: err.message }
   }
 }
+
+// Sync health checks to Supabase
+export const syncHealthChecks = async (client, healthChecks) => {
+  if (!client || !healthChecks.length) return { success: true }
+
+  try {
+    const formattedChecks = healthChecks.map(hc => ({
+      id: hc.id,
+      name: hc.name,
+      preset: hc.preset,
+      prompts: hc.prompts,
+      schedule: hc.schedule,
+      capital: hc.capital,
+      eggs: hc.eggs,
+      variations: hc.variations,
+      is_active: hc.isActive,
+      last_run: hc.lastRun,
+      created_at: hc.createdAt
+    }))
+
+    const { error } = await client
+      .from('health_checks')
+      .upsert(formattedChecks, { onConflict: 'id' })
+
+    if (error) throw error
+    return { success: true }
+  } catch (err) {
+    console.error('Sync health checks error:', err)
+    return { success: false, error: err.message }
+  }
+}
+
+// Load health checks from Supabase
+export const loadHealthChecks = async (client) => {
+  if (!client) return { success: false, data: [] }
+
+  try {
+    const { data, error } = await client
+      .from('health_checks')
+      .select('*')
+      .order('created_at', { ascending: false })
+
+    if (error) throw error
+
+    const formattedChecks = (data || []).map(hc => ({
+      id: hc.id,
+      name: hc.name,
+      preset: hc.preset,
+      prompts: hc.prompts,
+      schedule: hc.schedule,
+      capital: hc.capital,
+      eggs: hc.eggs,
+      variations: hc.variations,
+      isActive: hc.is_active,
+      lastRun: hc.last_run,
+      createdAt: hc.created_at
+    }))
+
+    return { success: true, data: formattedChecks }
+  } catch (err) {
+    console.error('Load health checks error:', err)
+    return { success: false, data: [], error: err.message }
+  }
+}
+
+// Delete health check from Supabase
+export const deleteHealthCheckFromCloud = async (client, healthCheckId) => {
+  if (!client) return { success: true }
+
+  try {
+    const { error } = await client
+      .from('health_checks')
+      .delete()
+      .eq('id', healthCheckId)
+
+    if (error) throw error
+    return { success: true }
+  } catch (err) {
+    console.error('Delete health check error:', err)
+    return { success: false, error: err.message }
+  }
+}

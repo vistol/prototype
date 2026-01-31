@@ -161,7 +161,8 @@ const weekDays = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
 
 export default function HealthCheckModal({ check, onClose }) {
   const prompts = useStore((state) => state.prompts) || []
-  const healthChecks = useStore((state) => state.healthChecks) || []
+  const addHealthCheck = useStore((state) => state.addHealthCheck)
+  const updateHealthCheck = useStore((state) => state.updateHealthCheck)
 
   const isEditing = !!check
 
@@ -232,11 +233,11 @@ export default function HealthCheckModal({ check, onClose }) {
       lastRun: check?.lastRun || null,
     }
 
-    const updatedChecks = isEditing
-      ? healthChecks.map(c => c.id === check.id ? newCheck : c)
-      : [...healthChecks, newCheck]
-
-    useStore.setState({ healthChecks: updatedChecks })
+    if (isEditing) {
+      updateHealthCheck(check.id, newCheck)
+    } else {
+      addHealthCheck(newCheck)
+    }
     onClose()
   }
 

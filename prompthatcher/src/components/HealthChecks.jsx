@@ -7,6 +7,8 @@ import HealthCheckModal from './HealthCheckModal'
 export default function HealthChecks() {
   const healthChecks = useStore((state) => state.healthChecks) || []
   const showHealthCheckModal = useStore((state) => state.showHealthCheckModal) || false
+  const updateHealthCheck = useStore((state) => state.updateHealthCheck)
+  const deleteHealthCheck = useStore((state) => state.deleteHealthCheck)
   const [expandedCheck, setExpandedCheck] = useState(null)
   const [editingCheck, setEditingCheck] = useState(null)
 
@@ -21,17 +23,14 @@ export default function HealthChecks() {
   }
 
   const toggleCheckStatus = (checkId) => {
-    const updatedChecks = healthChecks.map(check =>
-      check.id === checkId
-        ? { ...check, isActive: !check.isActive }
-        : check
-    )
-    useStore.setState({ healthChecks: updatedChecks })
+    const check = healthChecks.find(c => c.id === checkId)
+    if (check) {
+      updateHealthCheck(checkId, { isActive: !check.isActive })
+    }
   }
 
-  const deleteCheck = (checkId) => {
-    const updatedChecks = healthChecks.filter(check => check.id !== checkId)
-    useStore.setState({ healthChecks: updatedChecks })
+  const handleDeleteCheck = (checkId) => {
+    deleteHealthCheck(checkId)
   }
 
   const formatSchedule = (schedule) => {
@@ -240,7 +239,7 @@ export default function HealthChecks() {
                             <button
                               onClick={(e) => {
                                 e.stopPropagation()
-                                deleteCheck(check.id)
+                                handleDeleteCheck(check.id)
                               }}
                               className="py-2.5 px-4 rounded-xl bg-accent-red/10 border border-accent-red/30 text-accent-red font-medium text-sm flex items-center justify-center gap-2 hover:bg-accent-red/20 transition-colors"
                             >
