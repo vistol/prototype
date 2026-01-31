@@ -61,7 +61,7 @@ export default function BottomNav() {
               {isActive && (
                 <motion.div
                   layoutId="activeIndicator"
-                  className="absolute -top-0.5 left-1/2 -translate-x-1/2 w-8 h-0.5 bg-accent-cyan rounded-full"
+                  className="absolute top-0 left-1/2 -translate-x-1/2 w-8 h-0.5 bg-accent-cyan rounded-full"
                   transition={{ type: 'spring', stiffness: 500, damping: 30 }}
                 />
               )}
