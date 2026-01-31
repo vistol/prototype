@@ -12,10 +12,16 @@ const tabs = [
 export default function BottomNav() {
   const activeTab = useStore((state) => state.activeTab) || 'prompts'
   const setActiveTab = useStore((state) => state.setActiveTab)
+  const activeIndex = tabs.findIndex((tab) => tab.id === activeTab)
 
   return (
     <nav className="fixed bottom-0 left-0 right-0 bg-quant-card/95 backdrop-blur-lg border-t border-quant-border safe-area-bottom z-50">
-      <div className="flex justify-around items-center h-16 max-w-lg mx-auto px-2">
+      <div className="relative flex justify-around items-center h-16 max-w-lg mx-auto px-2">
+        <motion.div
+          className="absolute top-0 w-8 h-0.5 bg-accent-cyan rounded-full"
+          animate={{ left: `calc(${(activeIndex + 0.5) * 25}% - 1rem)` }}
+          transition={{ type: 'spring', stiffness: 500, damping: 30 }}
+        />
         {tabs.map((tab) => {
           const Icon = tab.icon
           const isActive = activeTab === tab.id
@@ -58,13 +64,6 @@ export default function BottomNav() {
               >
                 {tab.label}
               </span>
-              {isActive && (
-                <motion.div
-                  layoutId="activeIndicator"
-                  className="absolute top-0 left-1/2 -translate-x-1/2 w-8 h-0.5 bg-accent-cyan rounded-full"
-                  transition={{ type: 'spring', stiffness: 500, damping: 30 }}
-                />
-              )}
             </button>
           )
         })}
