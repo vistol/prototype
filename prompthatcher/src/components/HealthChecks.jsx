@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { HeartPulse, Plus, Clock, Target, Zap, Trash2, Play, Pause, Settings, ChevronDown, ChevronUp, AlertCircle } from 'lucide-react'
+import { HeartPulse, Plus, Clock, Target, Zap, Trash2, Play, Pause, Settings, ChevronDown, ChevronUp, AlertCircle, CheckCircle, Sparkles } from 'lucide-react'
 import useStore from '../store/useStore'
 import HealthCheckModal from './HealthCheckModal'
 
@@ -11,6 +11,7 @@ export default function HealthChecks() {
   const deleteHealthCheck = useStore((state) => state.deleteHealthCheck)
   const [expandedCheck, setExpandedCheck] = useState(null)
   const [editingCheck, setEditingCheck] = useState(null)
+  const [activeSubTab, setActiveSubTab] = useState('active')
 
   const handleOpenModal = (check = null) => {
     setEditingCheck(check)
@@ -42,55 +43,75 @@ export default function HealthChecks() {
     return 'Custom'
   }
 
+  // Filter health checks by status
+  const activeChecks = healthChecks.filter(check => check.isActive)
+  const finalisedChecks = healthChecks.filter(check => !check.isActive)
+  const displayedChecks = activeSubTab === 'active' ? activeChecks : finalisedChecks
+
+  // Format variation for display
+  const formatVariation = (variation) => {
+    return Object.entries(variation).map(([key, value]) => {
+      // Shorten key names
+      const shortKey = key
+        .replace('leverage', 'lev')
+        .replace('aiModel', 'ai')
+        .replace('executionTime', 'time')
+        .replace('targetPct', 'tp')
+        .replace('stopLoss', 'sl')
+        .replace('minIpe', 'ipe')
+        .replace('numResults', 'res')
+      return `${shortKey}:${value}`
+    }).join(' ')
+  }
+
   return (
     <div className="px-4 pb-4">
-      {/* Header Card */}
-      <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        className="bg-gradient-to-br from-accent-purple/20 to-accent-cyan/10 border border-accent-purple/30 rounded-2xl p-4 mb-4"
-      >
-        <div className="flex items-center gap-3 mb-2">
-          <div className="w-10 h-10 rounded-xl bg-accent-purple/20 flex items-center justify-center">
-            <HeartPulse size={20} className="text-accent-purple" />
-          </div>
-          <div>
-            <h3 className="text-white font-semibold">Health Checks</h3>
-            <p className="text-xs text-gray-400">Automated batch preset monitoring</p>
-          </div>
-        </div>
-        <p className="text-xs text-gray-500 mb-3">
-          Set up scheduled health checks to automatically run your prompts and monitor trading opportunities.
-        </p>
+      {/* Tabs for Active/Finalised */}
+      <div className="flex bg-quant-surface rounded-xl p-1 mb-4">
         <button
-          onClick={() => handleOpenModal()}
-          className="w-full py-2.5 rounded-xl bg-accent-purple/20 border border-accent-purple/30 text-accent-purple font-medium text-sm flex items-center justify-center gap-2 hover:bg-accent-purple/30 transition-colors"
+          onClick={() => setActiveSubTab('active')}
+          className={`flex-1 py-2.5 px-3 rounded-lg text-sm font-medium transition-all flex items-center justify-center gap-2 ${
+            activeSubTab === 'active'
+              ? 'bg-quant-card text-white shadow'
+              : 'text-gray-400'
+          }`}
         >
-          <Plus size={16} />
-          Create Health Check
+          <Play size={14} />
+          Active ({activeChecks.length})
         </button>
-      </motion.div>
+        <button
+          onClick={() => setActiveSubTab('finalised')}
+          className={`flex-1 py-2.5 px-3 rounded-lg text-sm font-medium transition-all flex items-center justify-center gap-2 ${
+            activeSubTab === 'finalised'
+              ? 'bg-quant-card text-white shadow'
+              : 'text-gray-400'
+          }`}
+        >
+          <CheckCircle size={14} />
+          Finalised ({finalisedChecks.length})
+        </button>
+      </div>
 
       {/* Health Checks List */}
       <div className="space-y-3">
-        <h2 className="text-sm font-semibold text-gray-400 uppercase tracking-wider flex items-center gap-2">
-          <Settings size={14} />
-          Active Presets ({healthChecks.length})
-        </h2>
-
-        {healthChecks.length === 0 ? (
+        {displayedChecks.length === 0 ? (
           <div className="text-center py-12">
             <div className="w-20 h-20 mx-auto mb-4 rounded-full bg-quant-surface flex items-center justify-center">
               <HeartPulse size={32} className="text-gray-600" />
             </div>
-            <p className="text-gray-400 mb-2">No health checks configured</p>
+            <p className="text-gray-400 mb-2">
+              {activeSubTab === 'active' ? 'No active health checks' : 'No finalised health checks'}
+            </p>
             <p className="text-sm text-gray-500">
-              Create a health check to automate your trading analysis
+              {activeSubTab === 'active'
+                ? 'Create a health check to automate your trading analysis'
+                : 'Paused health checks will appear here'
+              }
             </p>
           </div>
         ) : (
           <AnimatePresence mode="popLayout">
-            {healthChecks.map((check, index) => {
+            {displayedChecks.map((check, index) => {
               const isExpanded = expandedCheck === check.id
 
               return (
@@ -153,6 +174,28 @@ export default function HealthChecks() {
                             {check.prompts?.length || 0} prompts
                           </span>
                         </div>
+
+                        {/* Test Variations Preview */}
+                        {check.variations && check.variations.length > 0 && (
+                          <div className="mt-2 pt-2 border-t border-quant-border">
+                            <div className="flex items-center gap-1.5 mb-1.5">
+                              <Sparkles size={10} className="text-accent-cyan" />
+                              <span className="text-[10px] text-gray-500 uppercase tracking-wider">Test Variations ({check.variations.length})</span>
+                            </div>
+                            <div className="flex flex-wrap gap-1">
+                              {check.variations.slice(0, 6).map((variation, i) => (
+                                <span key={i} className="text-[9px] px-1.5 py-0.5 rounded bg-quant-surface text-gray-400 font-mono">
+                                  {formatVariation(variation)}
+                                </span>
+                              ))}
+                              {check.variations.length > 6 && (
+                                <span className="text-[9px] px-1.5 py-0.5 rounded bg-accent-cyan/10 text-accent-cyan font-mono">
+                                  +{check.variations.length - 6} more
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                        )}
                       </div>
                     </div>
                   </button>

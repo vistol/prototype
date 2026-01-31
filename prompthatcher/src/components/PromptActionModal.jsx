@@ -46,9 +46,9 @@ export default function PromptActionModal() {
 
     switch (actionId) {
       case 'edit':
-        // Open NewPromptModal in manual/edit mode
-        useStore.setState({ promptActionMode: 'edit' })
-        setNewPromptModalOpen(true)
+        // Navigate to Settings > Prompts tab
+        setActiveTab('settings')
+        useStore.setState({ settingsActiveTab: 1 })
         break
       case 'execute':
         // Open NewPromptModal in execute mode (library selection)

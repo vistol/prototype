@@ -84,10 +84,13 @@ export default function Settings() {
     resetSelectiveData,
     getDataCounts,
     eggs,
-    signals
+    signals,
+    settingsActiveTab,
+    setSettingsActiveTab
   } = useStore()
 
-  const [activeTab, setActiveTab] = useState(0)
+  const activeTab = settingsActiveTab
+  const setActiveTab = setSettingsActiveTab
   const [showApiKey, setShowApiKey] = useState({})
   const [testingConnection, setTestingConnection] = useState(false)
   const [connectionResult, setConnectionResult] = useState(null)

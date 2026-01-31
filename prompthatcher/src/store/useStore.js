@@ -1085,6 +1085,8 @@ If no truly new strategy can be generated, you must invent a new angle rather th
       // UI State
       activeTab: 'prompts',
       setActiveTab: (tab) => set({ activeTab: tab }),
+      settingsActiveTab: 0,
+      setSettingsActiveTab: (tab) => set({ settingsActiveTab: tab }),
 
       // Modal states
       isPromptActionModalOpen: false,
