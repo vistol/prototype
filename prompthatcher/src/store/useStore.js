@@ -1337,6 +1337,7 @@ If no truly new strategy can be generated, you must invent a new angle rather th
       // Persist settings locally including API keys
       partialize: (state) => ({
         onboardingCompleted: state.onboardingCompleted,
+        healthChecks: state.healthChecks,
         settings: {
           supabase: state.settings.supabase,
           tradingPlatform: state.settings.tradingPlatform,
@@ -1348,6 +1349,7 @@ If no truly new strategy can be generated, you must invent a new angle rather th
       merge: (persistedState, currentState) => ({
         ...currentState,
         ...persistedState,
+        healthChecks: persistedState?.healthChecks || [],
         settings: {
           ...currentState.settings,
           ...(persistedState?.settings || {}),
