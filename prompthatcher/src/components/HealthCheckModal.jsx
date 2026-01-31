@@ -253,7 +253,7 @@ export default function HealthCheckModal({ check, onClose }) {
         animate={{ y: 0 }}
         exit={{ y: '100%' }}
         transition={{ type: 'spring', damping: 25, stiffness: 300 }}
-        className="w-full max-w-lg bg-quant-card rounded-t-3xl max-h-[90vh] flex flex-col"
+        className="w-full max-w-lg bg-quant-card rounded-t-3xl max-h-[85vh] flex flex-col"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
@@ -562,19 +562,28 @@ export default function HealthCheckModal({ check, onClose }) {
         </div>
 
         {/* Footer */}
-        <div className="shrink-0 p-4 border-t border-quant-border">
+        <div className="shrink-0 p-4 pb-6 border-t border-quant-border safe-area-bottom">
           {step === 'preset' ? (
             <motion.button
               onClick={handleProceedToConfig}
               disabled={!selectedPreset}
               whileTap={{ scale: 0.98 }}
-              className="w-full py-4 rounded-xl bg-gradient-to-r from-accent-purple to-accent-cyan text-white font-bold disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
-              style={{
-                boxShadow: selectedPreset ? '0 0 20px rgba(139, 92, 246, 0.25)' : 'none'
-              }}
+              animate={selectedPreset ? { scale: [1, 1.02, 1] } : {}}
+              transition={{ duration: 0.3 }}
+              className={`w-full py-4 rounded-xl text-white font-bold flex items-center justify-center gap-2 transition-all ${
+                selectedPreset
+                  ? 'bg-gradient-to-r from-accent-purple to-accent-cyan pulse-glow'
+                  : 'bg-quant-surface text-gray-500 border border-quant-border'
+              }`}
             >
-              Continue to Configuration
-              <ArrowRight size={18} />
+              {selectedPreset ? (
+                <>
+                  Continue to Configuration
+                  <ArrowRight size={18} />
+                </>
+              ) : (
+                'Select a preset above'
+              )}
             </motion.button>
           ) : (
             <motion.button
