@@ -34,7 +34,7 @@ export default function Incubator() {
   const [activeFilter, setActiveFilter] = useState('live')
   const [expandedEgg, setExpandedEgg] = useState(null)
 
-  // Handle navigation from Hatchlings - expand the correct egg
+  // Handle navigation from Prompts - expand the correct egg
   useEffect(() => {
     if (navigateToEggId) {
       // Find if the egg exists and determine which filter to use

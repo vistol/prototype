@@ -1080,10 +1080,13 @@ If no truly new strategy can be generated, you must invent a new angle rather th
       clearLogs: () => set({ activityLogs: [] }),
 
       // UI State
-      activeTab: 'incubator',
+      activeTab: 'prompts',
       setActiveTab: (tab) => set({ activeTab: tab }),
 
       // Modal states
+      isPromptActionModalOpen: false,
+      setPromptActionModalOpen: (open) => set({ isPromptActionModalOpen: open }),
+
       isNewPromptModalOpen: false,
       setNewPromptModalOpen: (open) => set({ isNewPromptModalOpen: open }),
 
@@ -1096,7 +1099,15 @@ If no truly new strategy can be generated, you must invent a new angle rather th
       selectedPromptId: null,
       setSelectedPromptId: (id) => set({ selectedPromptId: id }),
 
-      // Cross-page egg navigation (from Hatchlings to Incubator)
+      // Prompts page state
+      promptsActiveTab: 'reports',
+      promptActionMode: null, // 'edit' or 'execute'
+
+      // Health Checks (batch presets)
+      healthChecks: [],
+      showHealthCheckModal: false,
+
+      // Cross-page egg navigation (from Prompts to Incubator)
       navigateToEggId: null,
       setNavigateToEggId: (eggId) => set({ navigateToEggId: eggId }),
       clearNavigateToEggId: () => set({ navigateToEggId: null }),

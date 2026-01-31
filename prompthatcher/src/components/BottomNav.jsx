@@ -1,16 +1,16 @@
 import { motion } from 'framer-motion'
-import { Egg, Radio, Bird, Settings } from 'lucide-react'
+import { Egg, Radio, FileText, Settings } from 'lucide-react'
 import useStore from '../store/useStore'
 
 const tabs = [
+  { id: 'prompts', label: 'Prompts', icon: FileText },
   { id: 'incubator', label: 'Incubator', icon: Egg },
   { id: 'signals', label: 'Signals', icon: Radio },
-  { id: 'hatchlings', label: 'Hatchlings', icon: Bird },
   { id: 'settings', label: 'Settings', icon: Settings },
 ]
 
 export default function BottomNav() {
-  const activeTab = useStore((state) => state.activeTab) || 'incubator'
+  const activeTab = useStore((state) => state.activeTab) || 'prompts'
   const setActiveTab = useStore((state) => state.setActiveTab)
 
   return (

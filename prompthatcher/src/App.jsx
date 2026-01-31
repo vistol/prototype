@@ -5,20 +5,23 @@ import useStore from './store/useStore'
 import BottomNav from './components/BottomNav'
 import Incubator from './pages/Incubator'
 import Signals from './pages/Signals'
-import Hatchlings from './pages/Hatchlings'
+import Prompts from './pages/Prompts'
 import Settings from './pages/Settings'
 import PromptDetail from './pages/PromptDetail'
 import NewPromptModal from './components/NewPromptModal'
 import SignalDetailModal from './components/SignalDetailModal'
+import PromptActionModal from './components/PromptActionModal'
 import FAB from './components/FAB'
 import Onboarding from './components/Onboarding'
 import EggIcon from './components/EggIcon'
 
 function App() {
   // Use individual selectors with safe defaults
-  const activeTab = useStore((state) => state.activeTab) || 'incubator'
+  const activeTab = useStore((state) => state.activeTab) || 'prompts'
   const isNewPromptModalOpen = useStore((state) => state.isNewPromptModalOpen) || false
   const setNewPromptModalOpen = useStore((state) => state.setNewPromptModalOpen)
+  const isPromptActionModalOpen = useStore((state) => state.isPromptActionModalOpen) || false
+  const setPromptActionModalOpen = useStore((state) => state.setPromptActionModalOpen)
   const isSignalDetailOpen = useStore((state) => state.isSignalDetailOpen) || false
   const selectedPromptId = useStore((state) => state.selectedPromptId)
   const onboardingCompleted = useStore((state) => state.onboardingCompleted) || false
@@ -92,16 +95,16 @@ function App() {
     }
 
     switch (activeTab) {
+      case 'prompts':
+        return <Prompts />
       case 'incubator':
         return <Incubator />
       case 'signals':
         return <Signals />
-      case 'hatchlings':
-        return <Hatchlings />
       case 'settings':
         return <Settings />
       default:
-        return <Incubator />
+        return <Prompts />
     }
   }
 
@@ -114,9 +117,9 @@ function App() {
         </AnimatePresence>
       </main>
 
-      {/* FAB for adding new prompts */}
-      {activeTab === 'incubator' && !selectedPromptId && (
-        <FAB onClick={() => setNewPromptModalOpen(true)} />
+      {/* FAB for adding new prompts - show on Prompts and Incubator pages */}
+      {(activeTab === 'prompts' || activeTab === 'incubator') && !selectedPromptId && (
+        <FAB onClick={() => activeTab === 'prompts' ? setPromptActionModalOpen(true) : setNewPromptModalOpen(true)} />
       )}
 
       {/* Bottom Navigation */}
@@ -124,6 +127,7 @@ function App() {
 
       {/* Modals */}
       <AnimatePresence>
+        {isPromptActionModalOpen && <PromptActionModal />}
         {isNewPromptModalOpen && <NewPromptModal />}
         {isSignalDetailOpen && <SignalDetailModal />}
       </AnimatePresence>
