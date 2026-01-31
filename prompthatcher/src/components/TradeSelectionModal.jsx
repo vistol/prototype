@@ -49,11 +49,13 @@ export default function TradeSelectionModal({ prompt, onClose, onComplete }) {
         animate={{ opacity: 1 }}
         exit={{ opacity: 0 }}
         className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm"
+        onClick={handleCancel}
       >
         <motion.div
           initial={{ scale: 0.9, opacity: 0 }}
           animate={{ scale: 1, opacity: 1 }}
           className="bg-quant-card rounded-2xl p-8 max-w-sm mx-4 text-center"
+          onClick={(e) => e.stopPropagation()}
         >
           <div className="relative w-24 h-24 mx-auto mb-6">
             <EggIcon size={96} status="incubating" />
@@ -62,9 +64,15 @@ export default function TradeSelectionModal({ prompt, onClose, onComplete }) {
             </div>
           </div>
           <h3 className="text-lg font-bold text-white mb-2">Generating Trades</h3>
-          <p className="text-sm text-gray-400">
+          <p className="text-sm text-gray-400 mb-6">
             Fetching real-time prices from Binance and generating trading opportunities...
           </p>
+          <button
+            onClick={handleCancel}
+            className="w-full py-3 rounded-xl bg-quant-surface text-gray-400 hover:text-white hover:bg-quant-border transition-colors active:scale-95"
+          >
+            Cancel
+          </button>
         </motion.div>
       </motion.div>
     )
@@ -126,9 +134,9 @@ export default function TradeSelectionModal({ prompt, onClose, onComplete }) {
             </div>
             <button
               onClick={handleCancel}
-              className="p-2 rounded-full hover:bg-quant-surface transition-colors"
+              className="p-3 -mr-1 rounded-full hover:bg-quant-surface transition-colors active:scale-90"
             >
-              <X size={20} className="text-gray-400" />
+              <X size={22} className="text-gray-400" />
             </button>
           </div>
 

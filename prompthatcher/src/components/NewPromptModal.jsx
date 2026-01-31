@@ -238,9 +238,9 @@ export default function NewPromptModal() {
             {step === 'config' && (
               <button
                 onClick={handleBack}
-                className="p-1.5 rounded-full hover:bg-quant-surface transition-colors"
+                className="p-2.5 -ml-1 rounded-full hover:bg-quant-surface transition-colors active:scale-90"
               >
-                <ArrowLeft size={18} className="text-gray-400" />
+                <ArrowLeft size={20} className="text-gray-400" />
               </button>
             )}
             <div>
@@ -254,9 +254,9 @@ export default function NewPromptModal() {
           </div>
           <button
             onClick={handleClose}
-            className="p-1.5 rounded-full hover:bg-quant-surface transition-colors"
+            className="p-3 -mr-1 rounded-full hover:bg-quant-surface transition-colors active:scale-90"
           >
-            <X size={18} className="text-gray-400" />
+            <X size={22} className="text-gray-400" />
           </button>
         </div>
 

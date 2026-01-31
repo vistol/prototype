@@ -88,9 +88,9 @@ export default function PromptActionModal() {
           </div>
           <button
             onClick={handleClose}
-            className="p-2 rounded-full hover:bg-quant-surface transition-colors"
+            className="p-3 -mr-1 rounded-full hover:bg-quant-surface transition-colors active:scale-90"
           >
-            <X size={20} className="text-gray-400" />
+            <X size={22} className="text-gray-400" />
           </button>
         </div>
 
