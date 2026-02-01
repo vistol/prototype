@@ -240,12 +240,7 @@ Configuración:
           _pnl: getEggPnlForSort(e) || 0 // Real-time PnL for sorting
         }))
         .sort((a, b) => {
-          // Always put expanded egg first (use String to avoid type mismatches)
-          if (expandedEgg) {
-            if (String(a.id) === String(expandedEgg)) return -1
-            if (String(b.id) === String(expandedEgg)) return 1
-          }
-
+          // Note: Expanded egg stays in place - no reordering on expand
           switch (sortBy) {
             case 'pnl':
               return (b._pnl || 0) - (a._pnl || 0)
@@ -262,7 +257,7 @@ Configuración:
       console.error('Error filtering eggs:', error)
       return []
     }
-  }, [eggs, signals, prices, activeFilter, filterBy, sortBy, expandedEgg])
+  }, [eggs, signals, prices, activeFilter, filterBy, sortBy])
 
   // Get egg status info
   const getEggStatus = (egg) => {
