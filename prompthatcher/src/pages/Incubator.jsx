@@ -39,7 +39,7 @@ export default function Incubator() {
   useEffect(() => {
     if (navigateToEggId) {
       // Find if the egg exists and determine which filter to use
-      const targetEgg = eggs.find(e => e.id === navigateToEggId)
+      const targetEgg = eggs.find(e => String(e.id) === String(navigateToEggId))
       if (targetEgg) {
         // Check if egg is completed (hatched or expired)
         const isExpired = targetEgg.expiresAt && new Date(targetEgg.expiresAt) <= new Date()
@@ -254,10 +254,10 @@ Configuración:
           _pnl: getEggPnlForSort(e) || 0 // Real-time PnL for sorting
         }))
         .sort((a, b) => {
-          // Always put expanded egg first
+          // Always put expanded egg first (use String to avoid type mismatches)
           if (expandedEgg) {
-            if (a.id === expandedEgg) return -1
-            if (b.id === expandedEgg) return 1
+            if (String(a.id) === String(expandedEgg)) return -1
+            if (String(b.id) === String(expandedEgg)) return 1
           }
 
           switch (sortBy) {
@@ -569,7 +569,7 @@ Configuración:
             filteredEggs.map((egg, index) => {
               const status = getEggStatus(egg)
               const eggSignals = signals.filter(s => egg.trades.includes(s.id))
-              const isExpanded = expandedEgg === egg.id
+              const isExpanded = expandedEgg && String(expandedEgg) === String(egg.id)
               const isExpiredEgg = isEggExpired(egg)
               const isCompleted = egg.status === 'hatched' || isExpiredEgg
               const pnl = !isCompleted ? getEggPnl(egg, status) : null
