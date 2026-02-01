@@ -14,7 +14,8 @@ import {
   loadHealthChecks,
   deletePromptFromCloud,
   deleteEggFromCloud,
-  deleteHealthCheckFromCloud
+  deleteHealthCheckFromCloud,
+  repairEggsData
 } from '../lib/supabase'
 import { generateTradesFromPrompt } from '../lib/aiService'
 import {
@@ -1374,6 +1375,39 @@ If no truly new strategy can be generated, you must invent a new angle rather th
               error: err.message
             }
           })
+          return { success: false, error: err.message }
+        }
+      },
+
+      // Repair eggs with empty prompt_content, full_ai_prompt, or config in Supabase
+      repairEggsInCloud: async () => {
+        const client = get().getClient()
+
+        if (!client) {
+          get().addLog('error', 'Cannot repair eggs: Supabase not configured')
+          return { success: false, error: 'Supabase not configured' }
+        }
+
+        get().addLog('sync', 'Starting repair of eggs with empty fields...')
+
+        try {
+          const result = await repairEggsData(client)
+
+          if (result.success) {
+            if (result.repaired > 0) {
+              get().addLog('sync', `Repaired ${result.repaired}/${result.total} eggs with empty fields`)
+              // Reload eggs to get the updated data
+              await get().loadFromCloud()
+            } else {
+              get().addLog('sync', `All ${result.total} eggs have valid data, no repair needed`)
+            }
+          } else {
+            get().addLog('error', `Failed to repair eggs: ${result.error}`)
+          }
+
+          return result
+        } catch (err) {
+          get().addLog('error', `Repair eggs error: ${err.message}`)
           return { success: false, error: err.message }
         }
       },

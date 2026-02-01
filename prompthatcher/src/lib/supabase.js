@@ -378,6 +378,108 @@ const ensureValidConfig = (config) => {
   return { ...defaultConfig, ...config }
 }
 
+// Repair eggs with empty fields in Supabase
+// This function loads all eggs, regenerates empty fields, and saves them back
+export const repairEggsData = async (client) => {
+  if (!client) return { success: false, error: 'No Supabase client' }
+
+  try {
+    console.log('[repairEggsData] Starting repair of eggs with empty fields...')
+
+    // Load all eggs from Supabase
+    const { data: eggs, error: loadError } = await client
+      .from('eggs')
+      .select('*')
+
+    if (loadError) throw loadError
+
+    if (!eggs || eggs.length === 0) {
+      console.log('[repairEggsData] No eggs found in database')
+      return { success: true, repaired: 0, total: 0 }
+    }
+
+    console.log(`[repairEggsData] Found ${eggs.length} eggs to check`)
+
+    let repairedCount = 0
+    const repairedEggs = []
+
+    for (const egg of eggs) {
+      let needsRepair = false
+      const repairedEgg = { ...egg }
+
+      // Check and repair prompt_content
+      if (!egg.prompt_content || egg.prompt_content.trim() === '') {
+        const fallbackContent = buildFallbackPromptContent({
+          promptName: egg.prompt_name,
+          config: egg.config
+        })
+        repairedEgg.prompt_content = fallbackContent
+        needsRepair = true
+        console.log(`[repairEggsData] Repairing prompt_content for egg ${egg.id}`)
+      }
+
+      // Check and repair full_ai_prompt
+      if (!egg.full_ai_prompt || egg.full_ai_prompt.trim() === '') {
+        const fallbackPrompt = buildFallbackFullAIPrompt({
+          promptName: egg.prompt_name,
+          promptContent: repairedEgg.prompt_content,
+          config: egg.config,
+          trades: egg.trades
+        })
+        repairedEgg.full_ai_prompt = fallbackPrompt
+        needsRepair = true
+        console.log(`[repairEggsData] Repairing full_ai_prompt for egg ${egg.id}`)
+      }
+
+      // Check and repair config
+      if (!egg.config || typeof egg.config !== 'object' || Object.keys(egg.config).length === 0) {
+        repairedEgg.config = ensureValidConfig(egg.config)
+        needsRepair = true
+        console.log(`[repairEggsData] Repairing config for egg ${egg.id}`)
+      } else {
+        // Even if config exists, ensure all fields are present
+        const validatedConfig = ensureValidConfig(egg.config)
+        if (JSON.stringify(validatedConfig) !== JSON.stringify(egg.config)) {
+          repairedEgg.config = validatedConfig
+          needsRepair = true
+          console.log(`[repairEggsData] Filling missing config fields for egg ${egg.id}`)
+        }
+      }
+
+      if (needsRepair) {
+        repairedCount++
+        repairedEggs.push(repairedEgg)
+      }
+    }
+
+    if (repairedEggs.length === 0) {
+      console.log('[repairEggsData] No eggs needed repair')
+      return { success: true, repaired: 0, total: eggs.length }
+    }
+
+    // Update repaired eggs in Supabase
+    console.log(`[repairEggsData] Updating ${repairedEggs.length} eggs in Supabase...`)
+
+    const { error: updateError } = await client
+      .from('eggs')
+      .upsert(repairedEggs, { onConflict: 'id' })
+
+    if (updateError) throw updateError
+
+    console.log(`[repairEggsData] Successfully repaired ${repairedCount} eggs`)
+
+    return {
+      success: true,
+      repaired: repairedCount,
+      total: eggs.length,
+      repairedIds: repairedEggs.map(e => e.id)
+    }
+  } catch (err) {
+    console.error('[repairEggsData] Error:', err)
+    return { success: false, error: err.message }
+  }
+}
+
 // Sync eggs to Supabase
 export const syncEggs = async (client, eggs) => {
   if (!client || !eggs.length) return { success: true }
