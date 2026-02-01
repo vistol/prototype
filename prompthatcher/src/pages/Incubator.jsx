@@ -95,8 +95,16 @@ export default function Incubator() {
     { id: 'trades', label: 'Trades' }
   ]
 
-  // Filter options (for completed tab)
-  const filterOptions = [
+  // Filter options for Live tab (active eggs)
+  const liveFilterOptions = [
+    { id: 'all', label: 'Todos' },
+    { id: 'healthChecks', label: 'Health Checks' },
+    { id: 'profitable', label: 'En Ganancia' },
+    { id: 'unprofitable', label: 'En Pérdida' }
+  ]
+
+  // Filter options for History tab (completed eggs)
+  const historyFilterOptions = [
     { id: 'all', label: 'Todos' },
     { id: 'healthChecks', label: 'Health Checks' },
     { id: 'profitable', label: 'Ganadores' },
@@ -104,6 +112,17 @@ export default function Incubator() {
     { id: 'hatched', label: 'Completados' },
     { id: 'expired', label: 'Expirados' }
   ]
+
+  // Get current filter options based on active tab
+  const filterOptions = activeFilter === 'live' ? liveFilterOptions : historyFilterOptions
+
+  // Reset filter when switching tabs if current filter is not available in new tab
+  useEffect(() => {
+    const validFilterIds = filterOptions.map(f => f.id)
+    if (!validFilterIds.includes(filterBy)) {
+      setFilterBy('all')
+    }
+  }, [activeFilter])
 
   // Get all prompt IDs that belong to health checks
   const healthCheckPromptIds = useMemo(() => {
@@ -236,14 +255,30 @@ Configuración:
         .filter(e => {
           if (!e) return false
           const expired = isEggExpired(e)
+
           if (activeFilter === 'live') {
-            return e.status === 'incubating' && !expired
+            // Live tab shows: incubating and not expired
+            const isLive = e.status === 'incubating' && !expired
+            if (!isLive) return false
+
+            // Apply filters for live tab
+            const results = getEggResults(e)
+            switch (filterBy) {
+              case 'healthChecks':
+                return healthCheckPromptIds.has(e.promptId)
+              case 'profitable':
+                return results.totalPnl >= 0
+              case 'unprofitable':
+                return results.totalPnl < 0
+              default:
+                return true
+            }
           } else {
             // Completed tab shows: naturally hatched OR expired eggs
             const isCompleted = e.status === 'hatched' || (e.status === 'incubating' && expired)
             if (!isCompleted) return false
 
-            // Apply sub-filter for completed tab
+            // Apply filters for completed tab
             const results = getEggResults(e)
             switch (filterBy) {
               case 'healthChecks':
@@ -520,25 +555,23 @@ Configuración:
 
       {/* Filter & Sort Options */}
       <div className="px-4 pb-3 space-y-2">
-        {/* Filter (only for completed tab) */}
-        {activeFilter === 'completed' && (
-          <div className="flex items-center gap-2 overflow-x-auto hide-scrollbar">
-            <Filter size={14} className="text-gray-500 shrink-0" />
-            {filterOptions.map((option) => (
-              <button
-                key={option.id}
-                onClick={() => setFilterBy(option.id)}
-                className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all shrink-0 ${
-                  filterBy === option.id
-                    ? 'bg-accent-cyan/20 text-accent-cyan'
-                    : 'bg-quant-surface text-gray-400'
-                }`}
-              >
-                {option.label}
-              </button>
-            ))}
-          </div>
-        )}
+        {/* Filter (for both tabs) */}
+        <div className="flex items-center gap-2 overflow-x-auto hide-scrollbar">
+          <Filter size={14} className="text-gray-500 shrink-0" />
+          {filterOptions.map((option) => (
+            <button
+              key={option.id}
+              onClick={() => setFilterBy(option.id)}
+              className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all shrink-0 ${
+                filterBy === option.id
+                  ? 'bg-accent-cyan/20 text-accent-cyan'
+                  : 'bg-quant-surface text-gray-400'
+              }`}
+            >
+              {option.label}
+            </button>
+          ))}
+        </div>
 
         {/* Sort */}
         <div className="flex items-center gap-2 overflow-x-auto hide-scrollbar">
