@@ -274,7 +274,13 @@ const useStore = create(
         if (selectedTrades.length === 0) return null
 
         // Extract the full AI prompt from the first trade (if available)
-        const fullAIPrompt = selectedTrades[0]?.fullAIPrompt || null
+        // VALIDATION: Ensure fullAIPrompt is never empty - build fallback if needed
+        let fullAIPrompt = selectedTrades[0]?.fullAIPrompt || null
+        if (!fullAIPrompt || fullAIPrompt.trim() === '') {
+          // Build a fallback AI prompt from available data
+          const assets = selectedTrades.map(t => t.asset).join(', ')
+          fullAIPrompt = `[AI Prompt Not Captured]\n\nStrategy: ${prompt.name || 'Unknown'}\nContent: ${prompt.content || 'No content'}\nAssets: ${assets}\nCapital: $${prompt.capital || 1000}\nLeverage: ${prompt.leverage || 5}x\nTarget: ${prompt.targetPct || 10}%\nMin IPE: ${prompt.minIpe || 80}%\nExecution: ${prompt.executionTime || 'target'}\nAI Model: ${prompt.aiModel || 'gemini'}\n\nNote: The original AI prompt was not captured. This is a reconstruction from the prompt configuration.`
+        }
 
         // Add trades to signals with 'active' status
         const newSignals = selectedTrades.map(t => {
@@ -286,37 +292,48 @@ const useStore = create(
           }
         })
 
-        // Build comprehensive prompt content for display
-        // Include prompt content, or build from configuration if not available
+        // VALIDATION: Build comprehensive prompt content for display
+        // Ensure promptContent is NEVER empty - always provide meaningful content
+        const promptName = prompt.name || 'Unnamed Strategy'
+        const promptMode = prompt.mode || 'auto'
+        const promptExecution = prompt.executionTime || 'target'
+        const promptCapital = prompt.capital || 1000
+        const promptLeverage = prompt.leverage || 5
+        const promptTarget = prompt.targetPct || 10
+        const promptMinIpe = prompt.minIpe || 80
+
         let promptContentDisplay = prompt.content
         if (!promptContentDisplay || promptContentDisplay.trim() === '') {
-          // Fallback: build content from configuration
-          promptContentDisplay = `Estrategia: ${prompt.name}\n\nConfiguración:\n- Modo: ${prompt.mode || 'auto'}\n- Ejecución: ${prompt.executionTime || 'target'}\n- Capital: $${prompt.capital || 1000}\n- Apalancamiento: ${prompt.leverage || 5}x\n- Objetivo: +${prompt.targetPct || 10}%\n- IPE Mínimo: ${prompt.minIpe || 80}%`
+          // Fallback: build comprehensive content from configuration
+          promptContentDisplay = `Estrategia: ${promptName}\n\nConfiguración:\n- Modo: ${promptMode}\n- Ejecución: ${promptExecution}\n- Capital: $${promptCapital}\n- Apalancamiento: ${promptLeverage}x\n- Objetivo: +${promptTarget}%\n- IPE Mínimo: ${promptMinIpe}%`
+        }
+
+        // VALIDATION: Ensure config object is always complete with all required fields
+        const validatedConfig = {
+          capital: prompt.capital || 1000,
+          leverage: prompt.leverage || 5,
+          executionTime: prompt.executionTime || 'target',
+          aiModel: prompt.aiModel || 'gemini',
+          aiProvider: prompt.aiModel || 'google',
+          minIpe: prompt.minIpe || 80,
+          numResults: prompt.numResults || 3,
+          mode: prompt.mode || 'auto',
+          targetPct: prompt.targetPct || 10 // Default to 10% instead of null
         }
 
         // Create the egg with all prompt configuration
         const egg = {
           id: `egg-${Date.now()}`,
-          promptId: prompt.id,
-          promptName: prompt.name,
+          promptId: prompt.id || `prompt-${Date.now()}`,
+          promptName: promptName,
           promptContent: promptContentDisplay,
-          fullAIPrompt: fullAIPrompt, // Store the complete prompt sent to AI
+          fullAIPrompt: fullAIPrompt, // Store the complete prompt sent to AI (validated)
           status: 'incubating',
           trades: newSignals.map(s => s.id),
           totalCapital: selectedTrades.reduce((sum, t) => sum + (t.capital || 0), 0),
-          // Store all prompt configuration
-          config: {
-            capital: prompt.capital || 1000,
-            leverage: prompt.leverage || 5,
-            executionTime: prompt.executionTime || 'target',
-            aiModel: prompt.aiModel || 'gemini',
-            aiProvider: prompt.aiModel || 'google', // Also store as provider for display
-            minIpe: prompt.minIpe || 80,
-            numResults: prompt.numResults || 3,
-            mode: prompt.mode || 'auto',
-            targetPct: prompt.targetPct || null // Profit target percentage
-          },
-          executionTime: prompt.executionTime,
+          // Store all prompt configuration (validated)
+          config: validatedConfig,
+          executionTime: promptExecution,
           expiresAt: EXECUTION_LIMITS[prompt.executionTime]
             ? new Date(Date.now() + EXECUTION_LIMITS[prompt.executionTime]).toISOString()
             : null,

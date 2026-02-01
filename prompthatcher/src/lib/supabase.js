@@ -340,27 +340,88 @@ export const loadSettings = async (client) => {
   }
 }
 
+// Helper to build fallback prompt content
+const buildFallbackPromptContent = (egg) => {
+  const name = egg.promptName || 'Unnamed Strategy'
+  const config = egg.config || {}
+  return `Estrategia: ${name}\n\nConfiguración:\n- Modo: ${config.mode || 'auto'}\n- Ejecución: ${config.executionTime || 'target'}\n- Capital: $${config.capital || 1000}\n- Apalancamiento: ${config.leverage || 5}x\n- Objetivo: +${config.targetPct || 10}%\n- IPE Mínimo: ${config.minIpe || 80}%`
+}
+
+// Helper to build fallback full AI prompt
+const buildFallbackFullAIPrompt = (egg) => {
+  const name = egg.promptName || 'Unknown'
+  const content = egg.promptContent || 'No content available'
+  const config = egg.config || {}
+  const trades = egg.trades || []
+  return `[AI Prompt Reconstructed]\n\nStrategy: ${name}\nContent: ${content}\nTrades: ${trades.length} trades\nCapital: $${config.capital || 1000}\nLeverage: ${config.leverage || 5}x\nTarget: ${config.targetPct || 10}%\nMin IPE: ${config.minIpe || 80}%\nExecution: ${config.executionTime || 'target'}\nAI Model: ${config.aiModel || 'gemini'}\n\nNote: Original AI prompt was not captured.`
+}
+
+// Helper to ensure config is never empty
+const ensureValidConfig = (config) => {
+  const defaultConfig = {
+    capital: 1000,
+    leverage: 5,
+    executionTime: 'target',
+    aiModel: 'gemini',
+    aiProvider: 'google',
+    minIpe: 80,
+    numResults: 3,
+    mode: 'auto',
+    targetPct: 10
+  }
+
+  if (!config || typeof config !== 'object' || Object.keys(config).length === 0) {
+    return defaultConfig
+  }
+
+  // Merge with defaults to fill any missing fields
+  return { ...defaultConfig, ...config }
+}
+
 // Sync eggs to Supabase
 export const syncEggs = async (client, eggs) => {
   if (!client || !eggs.length) return { success: true }
 
   try {
-    const formattedEggs = eggs.map(e => ({
-      id: e.id,
-      prompt_id: e.promptId,
-      prompt_name: e.promptName,
-      prompt_content: e.promptContent,
-      full_ai_prompt: e.fullAIPrompt,
-      config: e.config,
-      status: e.status,
-      trades: e.trades,
-      total_capital: e.totalCapital,
-      execution_time: e.executionTime,
-      expires_at: e.expiresAt,
-      hatched_at: e.hatchedAt,
-      results: e.results,
-      created_at: e.createdAt
-    }))
+    // VALIDATION: Ensure all required fields are never empty before syncing
+    const formattedEggs = eggs.map(e => {
+      // Validate and ensure prompt_content is never empty
+      let promptContent = e.promptContent
+      if (!promptContent || (typeof promptContent === 'string' && promptContent.trim() === '')) {
+        promptContent = buildFallbackPromptContent(e)
+        console.warn(`[syncEggs] Empty prompt_content detected for egg ${e.id}, using fallback`)
+      }
+
+      // Validate and ensure full_ai_prompt is never empty
+      let fullAIPrompt = e.fullAIPrompt
+      if (!fullAIPrompt || (typeof fullAIPrompt === 'string' && fullAIPrompt.trim() === '')) {
+        fullAIPrompt = buildFallbackFullAIPrompt(e)
+        console.warn(`[syncEggs] Empty full_ai_prompt detected for egg ${e.id}, using fallback`)
+      }
+
+      // Validate and ensure config is never empty
+      const validConfig = ensureValidConfig(e.config)
+      if (!e.config || Object.keys(e.config).length === 0) {
+        console.warn(`[syncEggs] Empty config detected for egg ${e.id}, using defaults`)
+      }
+
+      return {
+        id: e.id,
+        prompt_id: e.promptId,
+        prompt_name: e.promptName || 'Unnamed Strategy',
+        prompt_content: promptContent,
+        full_ai_prompt: fullAIPrompt,
+        config: validConfig,
+        status: e.status || 'incubating',
+        trades: e.trades || [],
+        total_capital: e.totalCapital || 0,
+        execution_time: e.executionTime || 'target',
+        expires_at: e.expiresAt,
+        hatched_at: e.hatchedAt,
+        results: e.results,
+        created_at: e.createdAt || new Date().toISOString()
+      }
+    })
 
     const { error } = await client
       .from('eggs')
