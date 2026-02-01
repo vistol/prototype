@@ -29,13 +29,14 @@ export default function Incubator() {
   const signals = useStore((state) => state.signals) || []
   const prices = useStore((state) => state.prices) || {}
   const priceStatus = useStore((state) => state.priceStatus) || {}
+  const healthChecks = useStore((state) => state.healthChecks) || []
   const navigateToEggId = useStore((state) => state.navigateToEggId)
   const clearNavigateToEggId = useStore((state) => state.clearNavigateToEggId)
   const [activeFilter, setActiveFilter] = useState('live')
   const [expandedEgg, setExpandedEgg] = useState(null)
   const eggRefs = useRef({})
 
-  // Handle navigation from Prompts - expand the correct egg
+  // Handle navigation from Prompts/HealthChecks - expand the correct egg
   useEffect(() => {
     if (navigateToEggId) {
       // Find if the egg exists and determine which filter to use
@@ -45,9 +46,18 @@ export default function Incubator() {
         const isExpired = targetEgg.expiresAt && new Date(targetEgg.expiresAt) <= new Date()
         const isCompleted = targetEgg.status === 'hatched' || (targetEgg.status === 'incubating' && isExpired)
 
+        // Check if egg belongs to a health check
+        const isFromHealthCheck = healthChecks.some(hc =>
+          hc.prompts?.some(p => p.id === targetEgg.promptId)
+        )
+
         // Switch to completed tab if the egg is completed
         if (isCompleted) {
           setActiveFilter('completed')
+          // If it's a health check egg, also set the healthChecks filter
+          if (isFromHealthCheck) {
+            setFilterBy('healthChecks')
+          }
         } else {
           setActiveFilter('live')
         }
@@ -58,7 +68,7 @@ export default function Incubator() {
       // Clear the navigation state
       clearNavigateToEggId()
     }
-  }, [navigateToEggId, eggs, clearNavigateToEggId])
+  }, [navigateToEggId, eggs, healthChecks, clearNavigateToEggId])
 
   // Note: Auto-scroll removed to allow users to read egg content without interruption
 
@@ -88,11 +98,26 @@ export default function Incubator() {
   // Filter options (for completed tab)
   const filterOptions = [
     { id: 'all', label: 'Todos' },
+    { id: 'healthChecks', label: 'Health Checks' },
     { id: 'profitable', label: 'Ganadores' },
     { id: 'unprofitable', label: 'Perdedores' },
     { id: 'hatched', label: 'Completados' },
     { id: 'expired', label: 'Expirados' }
   ]
+
+  // Get all prompt IDs that belong to health checks
+  const healthCheckPromptIds = useMemo(() => {
+    const ids = new Set()
+    healthChecks.forEach(hc => {
+      if (hc.prompts?.length) {
+        hc.prompts.forEach(p => ids.add(p.id))
+      }
+    })
+    return ids
+  }, [healthChecks])
+
+  // Check if an egg belongs to a health check
+  const isHealthCheckEgg = (egg) => healthCheckPromptIds.has(egg.promptId)
 
   // Toggle config expansion for an egg
   const toggleConfigExpand = (eggId) => {
@@ -221,6 +246,8 @@ Configuración:
             // Apply sub-filter for completed tab
             const results = getEggResults(e)
             switch (filterBy) {
+              case 'healthChecks':
+                return healthCheckPromptIds.has(e.promptId)
               case 'profitable':
                 return results.totalPnl >= 0
               case 'unprofitable':
@@ -260,7 +287,7 @@ Configuración:
   // Note: 'prices' intentionally excluded from dependencies to keep list order stable
   // PnL display updates in real-time via getEggPnl, but sort order only changes when
   // eggs/signals/filters change, not on every price tick
-  }, [eggs, signals, activeFilter, filterBy, sortBy])
+  }, [eggs, signals, activeFilter, filterBy, sortBy, healthCheckPromptIds])
 
   // Get egg status info
   const getEggStatus = (egg) => {
