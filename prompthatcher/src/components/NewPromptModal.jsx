@@ -29,6 +29,15 @@ const targetPresets = [
   { pct: 100, label: '2x' },
 ]
 
+// Loss limit presets
+const lossLimitPresets = [
+  { pct: 2, label: '2%' },
+  { pct: 5, label: '5%' },
+  { pct: 10, label: '10%' },
+  { pct: 15, label: '15%' },
+  { pct: 25, label: '25%' },
+]
+
 // Calculate estimated time and risk
 const calculateEstimate = (targetPct, leverage) => {
   const dailyVolatility = 3.5
@@ -94,6 +103,7 @@ export default function NewPromptModal() {
   const [capital, setCapital] = useState(1000)
   const [leverage, setLeverage] = useState(5)
   const [targetPct, setTargetPct] = useState(10)
+  const [lossLimitPct, setLossLimitPct] = useState(5)
   const [minIpe, setMinIpe] = useState(80)
   const [numResults, setNumResults] = useState(3)
 
@@ -156,6 +166,16 @@ export default function NewPromptModal() {
     return null
   }, [targetPct, leverage, executionTime])
 
+  // Live estimates of gains and losses based on capital
+  const liveEstimates = useMemo(() => {
+    if (executionTime === 'target') {
+      const estimatedGain = capital * (targetPct / 100)
+      const estimatedLoss = capital * (lossLimitPct / 100)
+      return { estimatedGain, estimatedLoss }
+    }
+    return null
+  }, [capital, targetPct, lossLimitPct, executionTime])
+
   // Can proceed to next step
   const canProceedToConfig = selectedStrategy !== null
   const canExecute = hasConfiguredProvider && selectedStrategy !== null
@@ -186,7 +206,8 @@ export default function NewPromptModal() {
       aiModel: aiProvider,
       minIpe,
       numResults,
-      targetPct: executionTime === 'target' ? targetPct : null
+      targetPct: executionTime === 'target' ? targetPct : null,
+      lossLimitPct: executionTime === 'target' ? lossLimitPct : null
     }
 
     setCurrentPrompt(promptToUse)
@@ -443,60 +464,119 @@ Example: Find cryptocurrencies with RSI below 30 on the 4H timeframe, near histo
 
                 {/* Target Mode Options */}
                 {executionTime === 'target' && (
-                  <div className="bg-quant-surface rounded-xl p-3 border border-quant-border">
-                    <div className="flex items-center justify-between mb-2">
-                      <label className="text-[10px] text-gray-500 uppercase tracking-wider flex items-center gap-1">
-                        <Target size={10} /> Profit Target
-                      </label>
-                      <span className="text-accent-cyan font-mono font-bold text-sm">+{targetPct}%</span>
+                  <div className="bg-quant-surface rounded-xl p-3 border border-quant-border space-y-4">
+                    {/* Take Profit Section */}
+                    <div>
+                      <div className="flex items-center justify-between mb-2">
+                        <label className="text-[10px] text-gray-500 uppercase tracking-wider flex items-center gap-1">
+                          <Target size={10} /> Take Profit
+                        </label>
+                        <span className="text-accent-green font-mono font-bold text-sm">+{targetPct}%</span>
+                      </div>
+
+                      <div className="flex gap-1.5 mb-2">
+                        {targetPresets.map((preset) => (
+                          <button
+                            key={preset.pct}
+                            onClick={() => setTargetPct(preset.pct)}
+                            className={`flex-1 py-2 rounded-lg text-xs font-mono transition-all ${
+                              targetPct === preset.pct
+                                ? 'bg-accent-green/20 text-accent-green border border-accent-green/30'
+                                : 'bg-quant-card text-gray-400 border border-transparent hover:border-gray-700'
+                            }`}
+                          >
+                            {preset.label}
+                          </button>
+                        ))}
+                      </div>
+
+                      <input
+                        type="range"
+                        min={1}
+                        max={200}
+                        value={targetPct}
+                        onChange={(e) => setTargetPct(Number(e.target.value))}
+                        className="w-full h-1"
+                      />
                     </div>
 
-                    <div className="flex gap-1.5 mb-3">
-                      {targetPresets.map((preset) => (
-                        <button
-                          key={preset.pct}
-                          onClick={() => setTargetPct(preset.pct)}
-                          className={`flex-1 py-2 rounded-lg text-xs font-mono transition-all ${
-                            targetPct === preset.pct
-                              ? 'bg-accent-cyan/20 text-accent-cyan border border-accent-cyan/30'
-                              : 'bg-quant-card text-gray-400 border border-transparent hover:border-gray-700'
-                          }`}
-                        >
-                          {preset.label}
-                        </button>
-                      ))}
+                    {/* Loss Limit Section */}
+                    <div>
+                      <div className="flex items-center justify-between mb-2">
+                        <label className="text-[10px] text-gray-500 uppercase tracking-wider flex items-center gap-1">
+                          <AlertTriangle size={10} /> Loss Limit
+                        </label>
+                        <span className="text-accent-red font-mono font-bold text-sm">-{lossLimitPct}%</span>
+                      </div>
+
+                      <div className="flex gap-1.5 mb-2">
+                        {lossLimitPresets.map((preset) => (
+                          <button
+                            key={preset.pct}
+                            onClick={() => setLossLimitPct(preset.pct)}
+                            className={`flex-1 py-2 rounded-lg text-xs font-mono transition-all ${
+                              lossLimitPct === preset.pct
+                                ? 'bg-accent-red/20 text-accent-red border border-accent-red/30'
+                                : 'bg-quant-card text-gray-400 border border-transparent hover:border-gray-700'
+                            }`}
+                          >
+                            {preset.label}
+                          </button>
+                        ))}
+                      </div>
+
+                      <input
+                        type="range"
+                        min={1}
+                        max={50}
+                        value={lossLimitPct}
+                        onChange={(e) => setLossLimitPct(Number(e.target.value))}
+                        className="w-full h-1"
+                      />
                     </div>
 
-                    <input
-                      type="range"
-                      min={1}
-                      max={200}
-                      value={targetPct}
-                      onChange={(e) => setTargetPct(Number(e.target.value))}
-                      className="w-full h-1 mb-3"
-                    />
-
-                    {estimate && (
-                      <div className="grid grid-cols-3 gap-2 text-center">
-                        <div className="bg-quant-card rounded-lg p-2">
-                          <span className="text-[9px] text-gray-500 block">Est. Time</span>
-                          <span className="text-xs font-mono text-white">{estimate.timeStr}</span>
-                        </div>
-                        <div className="bg-quant-card rounded-lg p-2">
-                          <span className="text-[9px] text-gray-500 block">Risk</span>
-                          <span className={`text-xs font-mono capitalize ${estimate.riskColor}`}>
-                            {estimate.risk}
+                    {/* Live Estimates Based on Capital */}
+                    {liveEstimates && (
+                      <div className="grid grid-cols-2 gap-2">
+                        <div className="bg-accent-green/10 border border-accent-green/20 rounded-lg p-3 text-center">
+                          <span className="text-[9px] text-gray-400 block mb-1">Potential Gain</span>
+                          <span className="text-lg font-mono font-bold text-accent-green">
+                            +${liveEstimates.estimatedGain.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                          </span>
+                          <span className="text-[10px] text-gray-500 block mt-0.5">
+                            if TP hits at +{targetPct}%
                           </span>
                         </div>
-                        <div className="bg-quant-card rounded-lg p-2">
-                          <span className="text-[9px] text-gray-500 block">Liq. at</span>
-                          <span className="text-xs font-mono text-accent-red">-{estimate.liquidationMove}%</span>
+                        <div className="bg-accent-red/10 border border-accent-red/20 rounded-lg p-3 text-center">
+                          <span className="text-[9px] text-gray-400 block mb-1">Max Loss</span>
+                          <span className="text-lg font-mono font-bold text-accent-red">
+                            -${liveEstimates.estimatedLoss.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                          </span>
+                          <span className="text-[10px] text-gray-500 block mt-0.5">
+                            if SL hits at -{lossLimitPct}%
+                          </span>
                         </div>
                       </div>
                     )}
 
+                    {/* Risk/Reward Ratio */}
+                    {liveEstimates && (
+                      <div className="flex items-center justify-center gap-2 py-2 bg-quant-card rounded-lg">
+                        <span className="text-[10px] text-gray-500">Risk/Reward Ratio</span>
+                        <span className="text-sm font-mono font-bold text-white">
+                          1:{(targetPct / lossLimitPct).toFixed(1)}
+                        </span>
+                        {targetPct / lossLimitPct >= 2 && (
+                          <span className="text-[9px] text-accent-green bg-accent-green/10 px-1.5 py-0.5 rounded">Good</span>
+                        )}
+                        {targetPct / lossLimitPct < 1 && (
+                          <span className="text-[9px] text-accent-red bg-accent-red/10 px-1.5 py-0.5 rounded">Poor</span>
+                        )}
+                      </div>
+                    )}
+
                     {estimate && estimate.risk !== 'low' && (
-                      <div className={`flex items-center gap-1.5 mt-2 p-2 rounded-lg text-[10px] ${
+                      <div className={`flex items-center gap-1.5 p-2 rounded-lg text-[10px] ${
                         estimate.risk === 'extreme' ? 'bg-accent-red/10 text-accent-red' : 'bg-accent-orange/10 text-accent-orange'
                       }`}>
                         <AlertTriangle size={12} />
