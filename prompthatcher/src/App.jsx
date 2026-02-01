@@ -111,7 +111,7 @@ function App() {
   return (
     <div className="min-h-screen bg-quant-bg flex flex-col">
       {/* Main Content */}
-      <main className="flex-1 overflow-y-auto hide-scrollbar pb-20 safe-area-top">
+      <main id="main-scroll-container" className="flex-1 overflow-y-auto hide-scrollbar pb-20 safe-area-top">
         <AnimatePresence mode="wait">
           {renderPage()}
         </AnimatePresence>

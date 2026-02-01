@@ -63,27 +63,32 @@ export default function Incubator() {
   // Auto-scroll to expanded egg
   useEffect(() => {
     if (expandedEgg) {
-      // Longer delay to ensure DOM is ready after page navigation
       const scrollToEgg = () => {
         const element = eggRefs.current[expandedEgg]
-        if (element) {
-          element.scrollIntoView({
-            behavior: 'smooth',
-            block: 'center'
+        const scrollContainer = document.getElementById('main-scroll-container')
+
+        if (element && scrollContainer) {
+          // Calculate position relative to scroll container
+          const elementRect = element.getBoundingClientRect()
+          const containerRect = scrollContainer.getBoundingClientRect()
+          const scrollTop = scrollContainer.scrollTop
+
+          // Calculate target scroll position (center the element)
+          const elementTop = elementRect.top - containerRect.top + scrollTop
+          const centerOffset = (containerRect.height - elementRect.height) / 2
+          const targetScroll = Math.max(0, elementTop - centerOffset)
+
+          scrollContainer.scrollTo({
+            top: targetScroll,
+            behavior: 'smooth'
           })
         }
       }
 
-      // Try multiple times to ensure element is available
-      const timer1 = setTimeout(scrollToEgg, 150)
-      const timer2 = setTimeout(scrollToEgg, 350)
-      const timer3 = setTimeout(scrollToEgg, 600)
+      // Try after DOM is ready
+      const timer = setTimeout(scrollToEgg, 300)
 
-      return () => {
-        clearTimeout(timer1)
-        clearTimeout(timer2)
-        clearTimeout(timer3)
-      }
+      return () => clearTimeout(timer)
     }
   }, [expandedEgg])
 
