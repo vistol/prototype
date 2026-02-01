@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect } from 'react'
+import { useState, useMemo, useEffect, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Archive, Clock, TrendingUp, TrendingDown, ChevronDown, ChevronUp, Activity, DollarSign, Zap, Cpu, Target, Hash, Radio, Filter, ArrowUpDown, Brain, MessageSquare, CheckCircle2, XCircle, Shield, Lightbulb, HelpCircle } from 'lucide-react'
 import useStore from '../store/useStore'
@@ -33,6 +33,7 @@ export default function Incubator() {
   const clearNavigateToEggId = useStore((state) => state.clearNavigateToEggId)
   const [activeFilter, setActiveFilter] = useState('live')
   const [expandedEgg, setExpandedEgg] = useState(null)
+  const eggRefs = useRef({})
 
   // Handle navigation from Prompts - expand the correct egg
   useEffect(() => {
@@ -58,6 +59,20 @@ export default function Incubator() {
       clearNavigateToEggId()
     }
   }, [navigateToEggId, eggs, clearNavigateToEggId])
+
+  // Auto-scroll to expanded egg
+  useEffect(() => {
+    if (expandedEgg && eggRefs.current[expandedEgg]) {
+      // Small delay to ensure the DOM has updated
+      setTimeout(() => {
+        eggRefs.current[expandedEgg]?.scrollIntoView({
+          behavior: 'smooth',
+          block: 'start'
+        })
+      }, 100)
+    }
+  }, [expandedEgg])
+
   const [expandedConfig, setExpandedConfig] = useState({}) // Track expanded config per egg
   const [expandedTrades, setExpandedTrades] = useState({}) // Track expanded trades for minimal list design
   const [activeTab, setActiveTab] = useState({}) // Track active tab per egg: 'config', 'trades', 'ai'
@@ -559,18 +574,24 @@ Configuración:
               return (
                 <motion.div
                   key={egg.id}
+                  ref={(el) => eggRefs.current[egg.id] = el}
                   layout
                   initial={{ opacity: 0, y: 20 }}
                   animate={{ opacity: 1, y: 0 }}
                   exit={{ opacity: 0, x: -100 }}
                   transition={{ delay: index * 0.05 }}
-                  className={`bg-quant-card rounded-2xl overflow-hidden border ${
-                    isExpiredEgg
-                      ? 'border-accent-orange/30'
-                      : egg.status === 'hatched'
-                        ? 'border-accent-green/30'
-                        : 'border-quant-border'
+                  className={`bg-quant-card rounded-2xl overflow-hidden border transition-all duration-300 ${
+                    isExpanded
+                      ? 'border-accent-cyan shadow-[0_0_20px_rgba(0,255,255,0.3)] ring-1 ring-accent-cyan/50'
+                      : isExpiredEgg
+                        ? 'border-accent-orange/30'
+                        : egg.status === 'hatched'
+                          ? 'border-accent-green/30'
+                          : 'border-quant-border'
                   }`}
+                  style={{
+                    scrollMarginTop: '80px' // Account for header when scrolling
+                  }}
                 >
                   {/* Card Header */}
                   <div
