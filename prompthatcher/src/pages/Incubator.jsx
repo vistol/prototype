@@ -60,35 +60,62 @@ export default function Incubator() {
     }
   }, [navigateToEggId, eggs, clearNavigateToEggId])
 
-  // Auto-scroll to expanded egg
+  // Auto-scroll to expanded egg - aggressive approach with interval
   useEffect(() => {
     if (expandedEgg) {
+      let attempts = 0
+      const maxAttempts = 20
+
       const scrollToEgg = () => {
         const element = eggRefs.current[expandedEgg]
         const scrollContainer = document.getElementById('main-scroll-container')
 
         if (element && scrollContainer) {
-          // Calculate position relative to scroll container
+          // Get fresh measurements
           const elementRect = element.getBoundingClientRect()
           const containerRect = scrollContainer.getBoundingClientRect()
-          const scrollTop = scrollContainer.scrollTop
 
-          // Calculate target scroll position (center the element)
+          // Check if element is already visible in center area
+          const elementCenter = elementRect.top + elementRect.height / 2
+          const containerCenter = containerRect.top + containerRect.height / 2
+          const tolerance = containerRect.height * 0.3
+
+          if (Math.abs(elementCenter - containerCenter) < tolerance) {
+            // Already centered enough, stop trying
+            return true
+          }
+
+          // Calculate scroll position
+          const scrollTop = scrollContainer.scrollTop
           const elementTop = elementRect.top - containerRect.top + scrollTop
           const centerOffset = (containerRect.height - elementRect.height) / 2
-          const targetScroll = Math.max(0, elementTop - centerOffset)
+          const targetScroll = Math.max(0, elementTop - Math.max(centerOffset, 100))
 
           scrollContainer.scrollTo({
             top: targetScroll,
             behavior: 'smooth'
           })
+          return true
         }
+        return false
       }
 
-      // Try after DOM is ready
-      const timer = setTimeout(scrollToEgg, 300)
+      // First scroll to top immediately to reset position
+      const scrollContainer = document.getElementById('main-scroll-container')
+      if (scrollContainer) {
+        scrollContainer.scrollTop = 0
+      }
 
-      return () => clearTimeout(timer)
+      // Then try to scroll to the egg with interval
+      const interval = setInterval(() => {
+        attempts++
+        const success = scrollToEgg()
+        if (success || attempts >= maxAttempts) {
+          clearInterval(interval)
+        }
+      }, 100)
+
+      return () => clearInterval(interval)
     }
   }, [expandedEgg])
 
