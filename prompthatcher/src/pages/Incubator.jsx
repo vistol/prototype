@@ -62,14 +62,28 @@ export default function Incubator() {
 
   // Auto-scroll to expanded egg
   useEffect(() => {
-    if (expandedEgg && eggRefs.current[expandedEgg]) {
-      // Small delay to ensure the DOM has updated
-      setTimeout(() => {
-        eggRefs.current[expandedEgg]?.scrollIntoView({
-          behavior: 'smooth',
-          block: 'start'
-        })
-      }, 100)
+    if (expandedEgg) {
+      // Longer delay to ensure DOM is ready after page navigation
+      const scrollToEgg = () => {
+        const element = eggRefs.current[expandedEgg]
+        if (element) {
+          element.scrollIntoView({
+            behavior: 'smooth',
+            block: 'center'
+          })
+        }
+      }
+
+      // Try multiple times to ensure element is available
+      const timer1 = setTimeout(scrollToEgg, 150)
+      const timer2 = setTimeout(scrollToEgg, 350)
+      const timer3 = setTimeout(scrollToEgg, 600)
+
+      return () => {
+        clearTimeout(timer1)
+        clearTimeout(timer2)
+        clearTimeout(timer3)
+      }
     }
   }, [expandedEgg])
 
