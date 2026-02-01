@@ -60,21 +60,7 @@ export default function Incubator() {
     }
   }, [navigateToEggId, eggs, clearNavigateToEggId])
 
-  // Auto-scroll to top when egg is expanded (expanded egg is always first in list)
-  useEffect(() => {
-    if (expandedEgg) {
-      const scrollContainer = document.getElementById('main-scroll-container')
-      if (scrollContainer) {
-        // Small delay to let the list reorder first
-        setTimeout(() => {
-          scrollContainer.scrollTo({
-            top: 0,
-            behavior: 'smooth'
-          })
-        }, 50)
-      }
-    }
-  }, [expandedEgg])
+  // Note: Auto-scroll removed to allow users to read egg content without interruption
 
   const [expandedConfig, setExpandedConfig] = useState({}) // Track expanded config per egg
   const [expandedTrades, setExpandedTrades] = useState({}) // Track expanded trades for minimal list design
@@ -550,22 +536,17 @@ Configuración:
 
       {/* Eggs List */}
       <div className="px-4 space-y-3">
-        <AnimatePresence mode="popLayout">
-          {filteredEggs.length === 0 ? (
-            <motion.div
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              className="text-center py-16"
-            >
-              <div className="w-20 h-20 mx-auto mb-4 rounded-full bg-quant-surface flex items-center justify-center">
-                <EggIcon size={48} status={activeFilter === 'live' ? 'incubating' : 'hatched'} />
-              </div>
-              <p className="text-gray-400 mb-1">No {activeFilter === 'live' ? 'live' : 'completed'} eggs</p>
-              <p className="text-sm text-gray-500">
-                {activeFilter === 'live' ? 'Create a prompt to start incubating' : 'Completed eggs appear here'}
-              </p>
-            </motion.div>
-          ) : (
+        {filteredEggs.length === 0 ? (
+          <div className="text-center py-16">
+            <div className="w-20 h-20 mx-auto mb-4 rounded-full bg-quant-surface flex items-center justify-center">
+              <EggIcon size={48} status={activeFilter === 'live' ? 'incubating' : 'hatched'} />
+            </div>
+            <p className="text-gray-400 mb-1">No {activeFilter === 'live' ? 'live' : 'completed'} eggs</p>
+            <p className="text-sm text-gray-500">
+              {activeFilter === 'live' ? 'Create a prompt to start incubating' : 'Completed eggs appear here'}
+            </p>
+          </div>
+        ) : (
             filteredEggs.map((egg, index) => {
               const status = getEggStatus(egg)
               const eggSignals = signals.filter(s => egg.trades.includes(s.id))
@@ -581,15 +562,10 @@ Configuración:
                 : null
 
               return (
-                <motion.div
+                <div
                   key={egg.id}
                   ref={(el) => eggRefs.current[egg.id] = el}
-                  layout
-                  initial={{ opacity: 0, y: 20 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, x: -100 }}
-                  transition={{ delay: index * 0.05 }}
-                  className={`bg-quant-card rounded-2xl overflow-hidden border transition-all duration-300 ${
+                  className={`bg-quant-card rounded-2xl overflow-hidden border ${
                     isExpanded
                       ? 'border-accent-cyan shadow-[0_0_20px_rgba(0,255,255,0.3)] ring-1 ring-accent-cyan/50'
                       : isExpiredEgg
@@ -667,9 +643,8 @@ Configuración:
                         {/* Progress bar - minimal */}
                         {!isCompleted && (
                           <div className="mt-3 h-1.5 bg-quant-surface rounded-full overflow-hidden">
-                            <motion.div
-                              initial={{ width: 0 }}
-                              animate={{ width: `${status.progress}%` }}
+                            <div
+                              style={{ width: `${status.progress}%` }}
                               className="h-full rounded-full bg-gradient-to-r from-accent-cyan to-accent-green"
                             />
                           </div>
@@ -784,38 +759,28 @@ Configuración:
                               </button>
 
                               {/* Expanded Content */}
-                              <AnimatePresence>
-                                {isConfigExpanded && (
-                                  <motion.div
-                                    initial={{ height: 0, opacity: 0 }}
-                                    animate={{ height: 'auto', opacity: 1 }}
-                                    exit={{ height: 0, opacity: 0 }}
-                                    transition={{ duration: 0.2 }}
-                                    className="overflow-hidden"
-                                  >
-                                    <div className="px-4 pb-4 pt-2 border-t border-quant-border">
-                                      {/* Explanation */}
-                                      {config.targetPct > 0 && (
-                                        <div className="text-center text-sm text-gray-400 mb-3">
-                                          Con <span className="text-white font-medium">{config.leverage || 1}x</span> leverage,
-                                          solo necesitas <span className="text-accent-cyan font-medium">{(priceMove || 0).toFixed(1)}%</span> de movimiento
-                                        </div>
-                                      )}
-
-                                      {/* Config Pills Row */}
-                                      <div className="flex items-center justify-center gap-3 text-[10px] text-gray-500">
-                                        <span>{EXECUTION_LABELS[config.executionTime] || config.executionTime}</span>
-                                        <span>•</span>
-                                        <span>{AI_MODEL_LABELS[config.aiModel]?.icon} {AI_MODEL_LABELS[config.aiModel]?.name || config.aiModel}</span>
-                                        <span>•</span>
-                                        <span>IPE {config.minIpe}%</span>
-                                        <span>•</span>
-                                        <span>{config.numResults} trade{config.numResults !== 1 ? 's' : ''}</span>
-                                      </div>
+                              {isConfigExpanded && (
+                                <div className="px-4 pb-4 pt-2 border-t border-quant-border">
+                                  {/* Explanation */}
+                                  {config.targetPct > 0 && (
+                                    <div className="text-center text-sm text-gray-400 mb-3">
+                                      Con <span className="text-white font-medium">{config.leverage || 1}x</span> leverage,
+                                      solo necesitas <span className="text-accent-cyan font-medium">{(priceMove || 0).toFixed(1)}%</span> de movimiento
                                     </div>
-                                  </motion.div>
-                                )}
-                              </AnimatePresence>
+                                  )}
+
+                                  {/* Config Pills Row */}
+                                  <div className="flex items-center justify-center gap-3 text-[10px] text-gray-500">
+                                    <span>{EXECUTION_LABELS[config.executionTime] || config.executionTime}</span>
+                                    <span>•</span>
+                                    <span>{AI_MODEL_LABELS[config.aiModel]?.icon} {AI_MODEL_LABELS[config.aiModel]?.name || config.aiModel}</span>
+                                    <span>•</span>
+                                    <span>IPE {config.minIpe}%</span>
+                                    <span>•</span>
+                                    <span>{config.numResults} trade{config.numResults !== 1 ? 's' : ''}</span>
+                                  </div>
+                                </div>
+                              )}
                             </div>
                           )})()}
 
@@ -926,15 +891,8 @@ Configuración:
                                     </div>
 
                                     {/* EXPANDED STATE: PnL-First Design */}
-                                    <AnimatePresence>
-                                      {isTradeExpanded && (
-                                        <motion.div
-                                          initial={{ height: 0, opacity: 0 }}
-                                          animate={{ height: 'auto', opacity: 1 }}
-                                          exit={{ height: 0, opacity: 0 }}
-                                          transition={{ duration: 0.2 }}
-                                          className="overflow-hidden border-t border-quant-border/30"
-                                        >
+                                    {isTradeExpanded && (
+                                      <div className="border-t border-quant-border/30">
                                           <div className="p-3 bg-quant-surface/20">
                                             {/* PnL Dominant Display */}
                                             <div className="flex items-center justify-between mb-3">
@@ -972,9 +930,8 @@ Configuración:
                                                         className="absolute top-0 bottom-0 w-0.5 bg-white z-10"
                                                         style={{ left: `${entryPos}%` }}
                                                       />
-                                                      <motion.div
-                                                        initial={{ width: 0 }}
-                                                        animate={{ width: `${progress}%` }}
+                                                      <div
+                                                        style={{ width: `${progress}%` }}
                                                         className={`h-full rounded-full ${isProfitBar ? 'bg-accent-green' : 'bg-accent-red'}`}
                                                       />
                                                       <div className="absolute -bottom-4 left-0 text-[9px] text-accent-red font-mono">SL</div>
@@ -1033,9 +990,8 @@ Configuración:
                                               {formatCurrency(cap).replace('+', '')} × {lev}x leverage
                                             </div>
                                           </div>
-                                        </motion.div>
-                                      )}
-                                    </AnimatePresence>
+                                      </div>
+                                    )}
                                   </div>
                                 )
                               }
@@ -1134,22 +1090,13 @@ Configuración:
                                       <ChevronDown size={14} className="text-gray-500 ml-auto" />
                                     )}
                                   </button>
-                                  <AnimatePresence>
-                                    {expandedConfig[`prompt-${egg.id}`] && (
-                                      <motion.div
-                                        initial={{ height: 0, opacity: 0 }}
-                                        animate={{ height: 'auto', opacity: 1 }}
-                                        exit={{ height: 0, opacity: 0 }}
-                                        className="overflow-hidden"
-                                      >
-                                        <div className="bg-quant-bg rounded-xl p-3 border border-accent-orange/20 max-h-96 overflow-y-auto">
-                                          <pre className="text-xs text-gray-400 whitespace-pre-wrap font-mono">
-                                            {egg.fullAIPrompt}
-                                          </pre>
-                                        </div>
-                                      </motion.div>
-                                    )}
-                                  </AnimatePresence>
+                                  {expandedConfig[`prompt-${egg.id}`] && (
+                                    <div className="bg-quant-bg rounded-xl p-3 border border-accent-orange/20 max-h-96 overflow-y-auto">
+                                      <pre className="text-xs text-gray-400 whitespace-pre-wrap font-mono">
+                                        {egg.fullAIPrompt}
+                                      </pre>
+                                    </div>
+                                  )}
                                 </div>
                               )}
 
@@ -1317,11 +1264,10 @@ Configuración:
                         </div>
                       </div>
                     )}
-                </motion.div>
+                </div>
               )
             })
           )}
-        </AnimatePresence>
       </div>
     </motion.div>
   )

@@ -83,13 +83,17 @@ export default function HealthChecks() {
     const totalTrades = eggSignals.length
     const closedTrades = closedSignals.length
 
-    // Calculate PnL
-    let totalPnl = 0
-    let totalPnlDollar = 0
+    // Calculate PnL - use AVERAGE to match Incubator page
+    let sumPnl = 0
+    let sumPnlDollar = 0
     closedSignals.forEach(s => {
-      totalPnl += s.pnl || 0
-      totalPnlDollar += s.pnlDollar || 0
+      sumPnl += s.pnl || 0
+      sumPnlDollar += s.pnlDollar || 0
     })
+
+    // Average PnL across all closed trades (same calculation as Incubator)
+    const totalPnl = closedTrades > 0 ? sumPnl / closedTrades : 0
+    const totalPnlDollar = closedTrades > 0 ? sumPnlDollar / closedTrades : 0
 
     // Check if expired
     const isExpired = egg.expiresAt && new Date(egg.expiresAt) < new Date()
