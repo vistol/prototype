@@ -96,6 +96,39 @@ export const initializeTables = async (client) => {
       system_prompt TEXT,
       updated_at TIMESTAMPTZ DEFAULT NOW()
     );
+
+    -- Eggs table (incubating trades)
+    CREATE TABLE IF NOT EXISTS eggs (
+      id TEXT PRIMARY KEY,
+      prompt_id TEXT REFERENCES prompts(id) ON DELETE CASCADE,
+      prompt_name TEXT,
+      prompt_content TEXT,
+      full_ai_prompt TEXT,
+      config JSONB,
+      status TEXT,
+      trades TEXT[] DEFAULT ARRAY[]::TEXT[],
+      total_capital NUMERIC,
+      execution_time TEXT,
+      expires_at TIMESTAMPTZ,
+      hatched_at TIMESTAMPTZ,
+      results JSONB,
+      created_at TIMESTAMPTZ DEFAULT NOW()
+    );
+
+    -- Health checks table
+    CREATE TABLE IF NOT EXISTS health_checks (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      preset TEXT,
+      prompts TEXT[] DEFAULT ARRAY[]::TEXT[],
+      schedule TEXT,
+      capital NUMERIC,
+      eggs TEXT[] DEFAULT ARRAY[]::TEXT[],
+      variations INTEGER,
+      is_active BOOLEAN DEFAULT false,
+      last_run TIMESTAMPTZ,
+      created_at TIMESTAMPTZ DEFAULT NOW()
+    );
   `
 
   return tables
