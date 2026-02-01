@@ -1,14 +1,19 @@
 import { useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { HeartPulse, Plus, Clock, Target, Zap, Trash2, Play, Pause, Settings, ChevronDown, ChevronUp, AlertCircle, CheckCircle, Sparkles } from 'lucide-react'
+import { HeartPulse, Plus, Clock, Target, Zap, Trash2, Play, Pause, Settings, ChevronDown, ChevronUp, AlertCircle, CheckCircle, Sparkles, Egg, ExternalLink, TrendingUp, TrendingDown } from 'lucide-react'
 import useStore from '../store/useStore'
 import HealthCheckModal from './HealthCheckModal'
+import EggIcon from './EggIcon'
 
 export default function HealthChecks() {
   const healthChecks = useStore((state) => state.healthChecks) || []
+  const eggs = useStore((state) => state.eggs) || []
+  const signals = useStore((state) => state.signals) || []
   const showHealthCheckModal = useStore((state) => state.showHealthCheckModal) || false
   const updateHealthCheck = useStore((state) => state.updateHealthCheck)
   const deleteHealthCheck = useStore((state) => state.deleteHealthCheck)
+  const setActiveTab = useStore((state) => state.setActiveTab)
+  const setNavigateToEggId = useStore((state) => state.setNavigateToEggId)
   const [expandedCheck, setExpandedCheck] = useState(null)
   const [editingCheck, setEditingCheck] = useState(null)
   const [activeSubTab, setActiveSubTab] = useState('active')
@@ -62,6 +67,50 @@ export default function HealthChecks() {
         .replace('numResults', 'res')
       return `${shortKey}:${value}`
     }).join(' ')
+  }
+
+  // Get eggs related to a health check based on its prompts
+  const getHealthCheckEggs = (check) => {
+    if (!check?.prompts?.length) return []
+    const promptIds = check.prompts.map(p => p.id)
+    return eggs.filter(egg => promptIds.includes(egg.promptId))
+  }
+
+  // Calculate egg stats (PnL, status)
+  const getEggStats = (egg) => {
+    const eggSignals = signals.filter(s => egg.trades?.includes(s.id))
+    const closedSignals = eggSignals.filter(s => s.status === 'closed')
+    const totalTrades = eggSignals.length
+    const closedTrades = closedSignals.length
+
+    // Calculate PnL
+    let totalPnl = 0
+    let totalPnlDollar = 0
+    closedSignals.forEach(s => {
+      totalPnl += s.pnl || 0
+      totalPnlDollar += s.pnlDollar || 0
+    })
+
+    // Check if expired
+    const isExpired = egg.expiresAt && new Date(egg.expiresAt) < new Date()
+    const isCompleted = egg.status === 'hatched' || isExpired
+
+    return {
+      totalTrades,
+      closedTrades,
+      totalPnl,
+      totalPnlDollar,
+      isExpired,
+      isCompleted,
+      progress: totalTrades > 0 ? (closedTrades / totalTrades) * 100 : 0
+    }
+  }
+
+  // Navigate to egg in Incubator
+  const navigateToEgg = (eggId, e) => {
+    e.stopPropagation()
+    setNavigateToEggId(eggId)
+    setActiveTab('incubator')
   }
 
   return (
@@ -164,16 +213,28 @@ export default function HealthChecks() {
                         </div>
 
                         {/* Info Row */}
-                        <div className="flex items-center gap-4 text-xs text-gray-500">
-                          <span className="flex items-center gap-1">
-                            <Clock size={12} />
-                            {formatSchedule(check.schedule)}
-                          </span>
-                          <span className="flex items-center gap-1">
-                            <Target size={12} />
-                            {check.prompts?.length || 0} prompts
-                          </span>
-                        </div>
+                        {(() => {
+                          const relatedEggs = getHealthCheckEggs(check)
+                          const liveEggs = relatedEggs.filter(e => e.status === 'incubating' && (!e.expiresAt || new Date(e.expiresAt) > new Date()))
+                          return (
+                            <div className="flex items-center gap-4 text-xs text-gray-500">
+                              <span className="flex items-center gap-1">
+                                <Clock size={12} />
+                                {formatSchedule(check.schedule)}
+                              </span>
+                              <span className="flex items-center gap-1">
+                                <Target size={12} />
+                                {check.prompts?.length || 0} prompts
+                              </span>
+                              {relatedEggs.length > 0 && (
+                                <span className={`flex items-center gap-1 ${liveEggs.length > 0 ? 'text-accent-cyan' : 'text-gray-500'}`}>
+                                  <Egg size={12} />
+                                  {relatedEggs.length} eggs {liveEggs.length > 0 && `(${liveEggs.length} live)`}
+                                </span>
+                              )}
+                            </div>
+                          )
+                        })()}
 
                         {/* Test Variations Preview */}
                         {check.variations && check.variations.length > 0 && (
@@ -244,6 +305,97 @@ export default function HealthChecks() {
                               </div>
                             </div>
                           )}
+
+                          {/* Related Eggs */}
+                          {(() => {
+                            const relatedEggs = getHealthCheckEggs(check)
+                            if (relatedEggs.length === 0) return null
+
+                            return (
+                              <div className="bg-quant-card rounded-xl p-3 border border-quant-border">
+                                <div className="flex items-center justify-between mb-3">
+                                  <span className="text-[10px] text-gray-500 uppercase flex items-center gap-1.5">
+                                    <Egg size={10} className="text-accent-orange" />
+                                    Eggs ({relatedEggs.length})
+                                  </span>
+                                </div>
+                                <div className="space-y-2">
+                                  {relatedEggs.map((egg) => {
+                                    const stats = getEggStats(egg)
+                                    const isProfitable = stats.totalPnl >= 0
+
+                                    return (
+                                      <button
+                                        key={egg.id}
+                                        onClick={(e) => navigateToEgg(egg.id, e)}
+                                        className="w-full p-2.5 rounded-xl bg-quant-surface border border-quant-border hover:border-accent-cyan/50 transition-all group text-left"
+                                      >
+                                        <div className="flex items-center gap-2.5">
+                                          {/* Egg Icon */}
+                                          <div className="w-8 h-8 shrink-0">
+                                            <EggIcon
+                                              status={stats.isCompleted ? 'hatched' : 'incubating'}
+                                              size={32}
+                                              progress={stats.progress}
+                                            />
+                                          </div>
+
+                                          {/* Egg Info */}
+                                          <div className="flex-1 min-w-0">
+                                            <div className="flex items-center justify-between mb-1">
+                                              <span className="text-xs font-medium text-white truncate">
+                                                {egg.promptName}
+                                              </span>
+                                              <div className="flex items-center gap-1.5">
+                                                {/* PnL */}
+                                                <span className={`text-xs font-mono flex items-center gap-0.5 ${
+                                                  isProfitable ? 'text-accent-green' : 'text-accent-red'
+                                                }`}>
+                                                  {isProfitable ? <TrendingUp size={10} /> : <TrendingDown size={10} />}
+                                                  {isProfitable ? '+' : ''}{stats.totalPnl.toFixed(2)}%
+                                                </span>
+                                                {/* Link indicator */}
+                                                <ExternalLink size={12} className="text-gray-500 group-hover:text-accent-cyan transition-colors" />
+                                              </div>
+                                            </div>
+
+                                            {/* Progress bar */}
+                                            <div className="flex items-center gap-2">
+                                              <div className="flex-1 h-1 bg-quant-card rounded-full overflow-hidden">
+                                                <div
+                                                  className={`h-full rounded-full transition-all ${
+                                                    stats.isCompleted
+                                                      ? isProfitable ? 'bg-accent-green' : 'bg-accent-red'
+                                                      : 'bg-accent-cyan'
+                                                  }`}
+                                                  style={{ width: `${stats.progress}%` }}
+                                                />
+                                              </div>
+                                              <span className="text-[9px] text-gray-500 font-mono shrink-0">
+                                                {stats.closedTrades}/{stats.totalTrades}
+                                              </span>
+                                              <span className={`text-[9px] px-1.5 py-0.5 rounded-full ${
+                                                stats.isCompleted
+                                                  ? stats.isExpired
+                                                    ? 'bg-accent-orange/20 text-accent-orange'
+                                                    : 'bg-accent-green/20 text-accent-green'
+                                                  : 'bg-accent-cyan/20 text-accent-cyan'
+                                              }`}>
+                                                {stats.isCompleted
+                                                  ? stats.isExpired ? 'Expired' : 'Hatched'
+                                                  : 'Live'
+                                                }
+                                              </span>
+                                            </div>
+                                          </div>
+                                        </div>
+                                      </button>
+                                    )
+                                  })}
+                                </div>
+                              </div>
+                            )
+                          })()}
 
                           {/* Last Run Info */}
                           {check.lastRun && (
