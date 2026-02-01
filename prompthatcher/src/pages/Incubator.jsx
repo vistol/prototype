@@ -1114,10 +1114,10 @@ Configuración:
                                 </div>
                               </div>
 
-                              {/* Configuration Summary */}
+                              {/* Configuration Summary - Always show with fallback values */}
                               <div className="flex flex-wrap gap-2">
                                 <span className="text-xs px-2 py-1 rounded-full bg-accent-cyan/10 text-accent-cyan">
-                                  ${egg.config?.capital?.toLocaleString() || 1000} capital
+                                  ${(egg.config?.capital || egg.totalCapital || 1000).toLocaleString()} capital
                                 </span>
                                 <span className="text-xs px-2 py-1 rounded-full bg-accent-purple/10 text-accent-purple">
                                   {egg.config?.leverage || 5}x leverage
@@ -1128,32 +1128,48 @@ Configuración:
                                 <span className="text-xs px-2 py-1 rounded-full bg-quant-surface text-gray-400">
                                   {AI_MODEL_LABELS[egg.config?.aiProvider || egg.config?.aiModel]?.icon || '🤖'} {AI_MODEL_LABELS[egg.config?.aiProvider || egg.config?.aiModel]?.name || 'AI'}
                                 </span>
+                                <span className="text-xs px-2 py-1 rounded-full bg-quant-surface text-gray-400">
+                                  IPE ≥{egg.config?.minIpe || 80}%
+                                </span>
+                                <span className="text-xs px-2 py-1 rounded-full bg-quant-surface text-gray-400">
+                                  {egg.config?.mode || 'auto'}
+                                </span>
                               </div>
 
-                              {/* Full AI Prompt - Expandable */}
-                              {egg.fullAIPrompt && (
-                                <div>
-                                  <button
-                                    onClick={() => toggleConfigExpand(`prompt-${egg.id}`)}
-                                    className="flex items-center gap-2 mb-2 w-full"
-                                  >
-                                    <Cpu size={14} className="text-accent-orange" />
-                                    <span className="text-[10px] text-gray-500 uppercase tracking-wider">Prompt Enviado al AI</span>
-                                    {expandedConfig[`prompt-${egg.id}`] ? (
-                                      <ChevronUp size={14} className="text-gray-500 ml-auto" />
-                                    ) : (
-                                      <ChevronDown size={14} className="text-gray-500 ml-auto" />
-                                    )}
-                                  </button>
-                                  {expandedConfig[`prompt-${egg.id}`] && (
-                                    <div className="bg-quant-bg rounded-xl p-3 border border-accent-orange/20 max-h-96 overflow-y-auto">
+                              {/* Full AI Prompt - Always show section, with fallback message */}
+                              <div>
+                                <button
+                                  onClick={() => toggleConfigExpand(`prompt-${egg.id}`)}
+                                  className="flex items-center gap-2 mb-2 w-full"
+                                >
+                                  <Cpu size={14} className="text-accent-orange" />
+                                  <span className="text-[10px] text-gray-500 uppercase tracking-wider">Prompt Enviado al AI</span>
+                                  {expandedConfig[`prompt-${egg.id}`] ? (
+                                    <ChevronUp size={14} className="text-gray-500 ml-auto" />
+                                  ) : (
+                                    <ChevronDown size={14} className="text-gray-500 ml-auto" />
+                                  )}
+                                </button>
+                                {expandedConfig[`prompt-${egg.id}`] && (
+                                  <div className="bg-quant-bg rounded-xl p-3 border border-accent-orange/20 max-h-96 overflow-y-auto">
+                                    {egg.fullAIPrompt ? (
                                       <pre className="text-xs text-gray-400 whitespace-pre-wrap font-mono">
                                         {egg.fullAIPrompt}
                                       </pre>
-                                    </div>
-                                  )}
-                                </div>
-                              )}
+                                    ) : (
+                                      <div className="text-center py-4">
+                                        <Cpu size={24} className="text-gray-600 mx-auto mb-2" />
+                                        <p className="text-xs text-gray-500">
+                                          El prompt original no fue capturado para este egg.
+                                        </p>
+                                        <p className="text-xs text-gray-600 mt-1">
+                                          Los nuevos eggs incluirán el prompt completo.
+                                        </p>
+                                      </div>
+                                    )}
+                                  </div>
+                                )}
+                              </div>
 
                               {/* AI Reasoning per Trade - Glass Box Trading */}
                               <div>

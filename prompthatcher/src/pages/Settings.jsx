@@ -77,6 +77,7 @@ export default function Settings() {
     addPrompt,
     syncToCloud,
     loadFromCloud,
+    repairEggsInCloud,
     syncStatus,
     priceStatus,
     refreshPrices,
@@ -156,6 +157,8 @@ export default function Settings() {
   const [isResetting, setIsResetting] = useState(false)
   const [showPromptEditor, setShowPromptEditor] = useState(false)
   const [editingPromptData, setEditingPromptData] = useState(null)
+  const [isRepairing, setIsRepairing] = useState(false)
+  const [repairResult, setRepairResult] = useState(null)
 
   // Get current data counts
   const dataCounts = getDataCounts()
@@ -886,6 +889,70 @@ export default function Settings() {
                           <span>{syncStatus.error}</span>
                         </div>
                       )}
+
+                      {/* Repair Eggs Data */}
+                      <div className="pt-3 border-t border-quant-border">
+                        <h4 className="text-xs text-gray-400 uppercase tracking-wider mb-2">Data Repair</h4>
+                        <p className="text-xs text-gray-500 mb-3">
+                          Regenera campos vacíos (prompt_content, full_ai_prompt, config) en eggs existentes
+                        </p>
+                        <button
+                          onClick={async () => {
+                            setIsRepairing(true)
+                            setRepairResult(null)
+                            try {
+                              const result = await repairEggsInCloud()
+                              setRepairResult(result)
+                            } catch (err) {
+                              setRepairResult({ success: false, error: err.message })
+                            }
+                            setIsRepairing(false)
+                          }}
+                          disabled={isRepairing}
+                          className={`w-full py-2.5 rounded-xl font-medium flex items-center justify-center gap-2 transition-all ${
+                            isRepairing
+                              ? 'bg-quant-surface text-gray-400'
+                              : 'bg-accent-orange/20 text-accent-orange hover:bg-accent-orange/30'
+                          }`}
+                        >
+                          {isRepairing ? (
+                            <>
+                              <RefreshCw size={14} className="animate-spin" />
+                              Reparando eggs...
+                            </>
+                          ) : (
+                            <>
+                              <Cpu size={14} />
+                              Reparar Datos de Eggs
+                            </>
+                          )}
+                        </button>
+
+                        {repairResult && (
+                          <div className={`mt-2 p-2 rounded-lg text-xs flex items-start gap-2 ${
+                            repairResult.success
+                              ? 'bg-accent-green/10 border border-accent-green/30 text-accent-green'
+                              : 'bg-accent-red/10 border border-accent-red/30 text-accent-red'
+                          }`}>
+                            {repairResult.success ? (
+                              <>
+                                <Check size={14} className="shrink-0 mt-0.5" />
+                                <span>
+                                  {repairResult.repaired > 0
+                                    ? `Reparados ${repairResult.repaired}/${repairResult.total} eggs`
+                                    : `Todos los ${repairResult.total} eggs tienen datos válidos`
+                                  }
+                                </span>
+                              </>
+                            ) : (
+                              <>
+                                <AlertCircle size={14} className="shrink-0 mt-0.5" />
+                                <span>{repairResult.error}</span>
+                              </>
+                            )}
+                          </div>
+                        )}
+                      </div>
                     </div>
                   )}
                 </div>
