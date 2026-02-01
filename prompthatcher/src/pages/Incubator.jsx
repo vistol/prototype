@@ -95,15 +95,32 @@ export default function Incubator() {
     { id: 'trades', label: 'Trades' }
   ]
 
-  // Filter options (for completed tab)
-  const filterOptions = [
+  // Filter options - shared between Live and Historial (Option A: Consistencia Total)
+  const baseFilterOptions = [
     { id: 'all', label: 'Todos' },
     { id: 'healthChecks', label: 'Health Checks' },
-    { id: 'profitable', label: 'Ganadores' },
-    { id: 'unprofitable', label: 'Perdedores' },
+    { id: 'profitable', label: 'En Verde' },
+    { id: 'unprofitable', label: 'En Rojo' }
+  ]
+
+  // Additional filters only for Historial tab
+  const historialOnlyFilters = [
     { id: 'hatched', label: 'Completados' },
     { id: 'expired', label: 'Expirados' }
   ]
+
+  // Get filter options based on active tab
+  const filterOptions = activeFilter === 'live'
+    ? baseFilterOptions
+    : [...baseFilterOptions, ...historialOnlyFilters]
+
+  // Reset filter when switching tabs if current filter is not available
+  useEffect(() => {
+    const availableFilterIds = filterOptions.map(f => f.id)
+    if (!availableFilterIds.includes(filterBy)) {
+      setFilterBy('all')
+    }
+  }, [activeFilter])
 
   // Get all prompt IDs that belong to health checks
   const healthCheckPromptIds = useMemo(() => {
@@ -227,6 +244,7 @@ Configuración:
   }
 
   // Filter eggs: Live (active & not expired) vs Completed (hatched or expired)
+  // Option A: Consistencia Total - filters apply to both tabs
   const filteredEggs = useMemo(() => {
     try {
       // Ensure eggs is an array
@@ -236,15 +254,29 @@ Configuración:
         .filter(e => {
           if (!e) return false
           const expired = isEggExpired(e)
+          const results = getEggResults(e)
+
           if (activeFilter === 'live') {
-            return e.status === 'incubating' && !expired
+            // First: must be live (incubating and not expired)
+            if (!(e.status === 'incubating' && !expired)) return false
+
+            // Then apply sub-filters (Option A)
+            switch (filterBy) {
+              case 'healthChecks':
+                return healthCheckPromptIds.has(e.promptId)
+              case 'profitable':
+                return results.totalPnl >= 0
+              case 'unprofitable':
+                return results.totalPnl < 0
+              default:
+                return true
+            }
           } else {
             // Completed tab shows: naturally hatched OR expired eggs
             const isCompleted = e.status === 'hatched' || (e.status === 'incubating' && expired)
             if (!isCompleted) return false
 
             // Apply sub-filter for completed tab
-            const results = getEggResults(e)
             switch (filterBy) {
               case 'healthChecks':
                 return healthCheckPromptIds.has(e.promptId)
@@ -520,25 +552,23 @@ Configuración:
 
       {/* Filter & Sort Options */}
       <div className="px-4 pb-3 space-y-2">
-        {/* Filter (only for completed tab) */}
-        {activeFilter === 'completed' && (
-          <div className="flex items-center gap-2 overflow-x-auto hide-scrollbar">
-            <Filter size={14} className="text-gray-500 shrink-0" />
-            {filterOptions.map((option) => (
-              <button
-                key={option.id}
-                onClick={() => setFilterBy(option.id)}
-                className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all shrink-0 ${
-                  filterBy === option.id
-                    ? 'bg-accent-cyan/20 text-accent-cyan'
-                    : 'bg-quant-surface text-gray-400'
-                }`}
-              >
-                {option.label}
-              </button>
-            ))}
-          </div>
-        )}
+        {/* Filter (available in both tabs - Option A: Consistencia Total) */}
+        <div className="flex items-center gap-2 overflow-x-auto hide-scrollbar">
+          <Filter size={14} className="text-gray-500 shrink-0" />
+          {filterOptions.map((option) => (
+            <button
+              key={option.id}
+              onClick={() => setFilterBy(option.id)}
+              className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all shrink-0 ${
+                filterBy === option.id
+                  ? 'bg-accent-cyan/20 text-accent-cyan'
+                  : 'bg-quant-surface text-gray-400'
+              }`}
+            >
+              {option.label}
+            </button>
+          ))}
+        </div>
 
         {/* Sort */}
         <div className="flex items-center gap-2 overflow-x-auto hide-scrollbar">
