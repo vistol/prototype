@@ -257,7 +257,10 @@ Configuración:
       console.error('Error filtering eggs:', error)
       return []
     }
-  }, [eggs, signals, prices, activeFilter, filterBy, sortBy])
+  // Note: 'prices' intentionally excluded from dependencies to keep list order stable
+  // PnL display updates in real-time via getEggPnl, but sort order only changes when
+  // eggs/signals/filters change, not on every price tick
+  }, [eggs, signals, activeFilter, filterBy, sortBy])
 
   // Get egg status info
   const getEggStatus = (egg) => {
