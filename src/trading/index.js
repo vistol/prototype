@@ -123,11 +123,25 @@ export {
 
 // ==================== COMPONENTS ====================
 export {
+  // Existing
   GenerationProgress,
   GlassBoxDisplay,
   progressStyles,
   glassBoxStyles,
-  allStyles
+  allStyles,
+  // Event Log
+  EventLog,
+  EventRow,
+  EVENT_TYPES,
+  STEP_ICONS,
+  STEP_NAMES,
+  LEVEL_COLORS,
+  formatEvent,
+  getLevelColor,
+  formatTimestamp,
+  // Incubator
+  Incubator,
+  EggCard
 } from './components/index.js';
 
 // ==================== CONVENIENCE ====================
